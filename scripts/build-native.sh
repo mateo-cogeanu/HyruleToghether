@@ -3,8 +3,14 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 build="$root/Build/cross-platform"
+source="$root/DLL/InjectDLL"
 
-cmake_args=(-S "$root/DLL/InjectDLL" -B "$build" -DCMAKE_BUILD_TYPE=Release)
+if [[ "$(uname -s)" == "Linux" ]]; then
+  "$root/scripts/prepare-linux-client-source.sh"
+  source="$root/Build/linux-client-source"
+fi
+
+cmake_args=(-S "$source" -B "$build" -DCMAKE_BUILD_TYPE=Release)
 if [[ "$(uname -s)" == "Darwin" ]]; then
   # Cemu 2.6 for macOS is x86-64. Current development builds can be arm64,
   # so produce a universal client that works with either executable.

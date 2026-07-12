@@ -25,6 +25,11 @@ matching OS and CPU architecture. Output is written under
 `Build/launcher/<target>` as a macOS `.app` and zip or a Linux directory and
 tarball.
 
+Linux client compilation uses a generated compatibility copy under
+`Build/linux-client-source`. It normalizes inherited MSVC-only declarations for
+GCC and supplies Linux-specific standard-library includes without modifying the
+tested macOS source path.
+
 The resulting package already contains:
 
 - current patched Cemu for that target;

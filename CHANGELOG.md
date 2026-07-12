@@ -78,6 +78,7 @@ All notable changes made while turning the original Windows-only Milk Bar Launch
 - Corrected several non-portable exception constructions, path operations, string conversions, socket assumptions, and structure definitions.
 - Added safe initialization waits for Cemu's emulated-memory base and HLE subsystem.
 - Hardened client startup and disconnect behavior when configuration or runtime hooks are missing.
+- Added a separate generated Linux client source area. Linux builds copy the shared implementation to `Build/linux-client-source`, normalize inherited `static class`/`extern struct` MSVC extensions for GCC, and add the required `<cmath>` include, while macOS continues compiling the original tested source tree unchanged.
 
 ### Native Cemu memory scanning
 
