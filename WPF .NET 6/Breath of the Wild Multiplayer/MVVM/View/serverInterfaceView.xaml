@@ -1,0 +1,70 @@
+﻿<UserControl x:Class="Breath_of_the_Wild_Multiplayer.MVVM.View.serverInterfaceView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:Breath_of_the_Wild_Multiplayer.MVVM.View"
+             xmlns:sys="clr-namespace:System;assembly=mscorlib"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800">
+    <Grid>
+
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="0.6*"/>
+            <ColumnDefinition Width="0.4*"/>
+            <ColumnDefinition Width="70"/>
+        </Grid.ColumnDefinitions>
+
+        <Border Background="#99000000" Margin="10" Grid.Column="1" CornerRadius="10"/>
+        <Rectangle Fill="#CC1C1C1C" Grid.Column="2" Margin="0,-0.175,0,-0.3"/>
+
+        <Path Stroke="#55FFFFFF" Grid.ColumnSpan="2" StrokeThickness="2" Panel.ZIndex="1">
+            <Path.Data>
+                <GeometryGroup>
+                    <LineGeometry StartPoint="0,1" EndPoint="1105,1"/>
+                    <LineGeometry StartPoint="1105,1" EndPoint="1115,12"/>
+                    <LineGeometry StartPoint="1115,12" EndPoint="1115,486"/>
+                    <LineGeometry StartPoint="1115,486" EndPoint="1105,496"/>
+                    <LineGeometry StartPoint="0,496" EndPoint="1105,496"/>
+                </GeometryGroup>
+            </Path.Data>
+        </Path>
+
+        <Polygon Fill="#55FFFFFF" Grid.Column="1" Points="0 0,5 0,5 5" Panel.ZIndex="1" HorizontalAlignment="Right"/>
+        <Polygon Fill="#55FFFFFF" Grid.Column="1" Points="0 0,5 0,5 5" Panel.ZIndex="1" Margin="0,0,5,0" HorizontalAlignment="Right"/>
+        <Polygon Fill="#55FFFFFF" Grid.Column="1" Points="0 0,5 0,5 5" Panel.ZIndex="1" Margin="0,5,0,0" HorizontalAlignment="Right"/>
+                                    
+        <Polygon Fill="#55FFFFFF" Grid.Column="1" Points="0 0,-5 0,0 -5" Panel.ZIndex="1" VerticalAlignment="Bottom" Margin="0,0,0,5" HorizontalAlignment="Right"/>
+        <Polygon Fill="#55FFFFFF" Grid.Column="1" Points="0 0,-5 0,0 -5" Panel.ZIndex="1" VerticalAlignment="Bottom" Margin="0,0,5,0" HorizontalAlignment="Right"/>
+        <Polygon Fill="#55FFFFFF" Grid.Column="1" Points="0 0,-5 0,0 -5" Panel.ZIndex="1" VerticalAlignment="Bottom" HorizontalAlignment="Right"/>
+
+        <StackPanel>
+
+            <TextBox Style="{StaticResource modifiableTextBox}" Text="alskdjawsd">
+                <TextBox.Tag>
+                    <sys:String>Player 1</sys:String>
+                </TextBox.Tag>
+            </TextBox>
+
+            <TextBox Style="{StaticResource modifiableTextBox}" Text="alskdjawsd">
+                <TextBox.Tag>
+                    <sys:String>Player 2</sys:String>
+                </TextBox.Tag>
+            </TextBox>
+
+            <TextBox Style="{StaticResource modifiableTextBox}" Text="alskdjawsd">
+                <TextBox.Tag>
+                    <sys:String>Player 3</sys:String>
+                </TextBox.Tag>
+            </TextBox>
+
+            <TextBox Style="{StaticResource modifiableTextBox}" Text="alskdjawsd">
+                <TextBox.Tag>
+                    <sys:String>Player 4</sys:String>
+                </TextBox.Tag>
+            </TextBox>
+
+        </StackPanel>
+        
+    </Grid>
+</UserControl>

@@ -1,0 +1,152 @@
+﻿<UserControl x:Class="Breath_of_the_Wild_Multiplayer.MVVM.View.EnvironmentalSelectorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:Breath_of_the_Wild_Multiplayer.MVVM.View"
+             xmlns:viewModel="clr-namespace:Breath_of_the_Wild_Multiplayer.MVVM.ViewModel"
+             xmlns:sys="clr-namespace:System;assembly=mscorlib"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800">
+    <UserControl.DataContext>
+        <viewModel:EnvironmentalSelectorModel/>
+    </UserControl.DataContext>
+
+    <Grid Margin="80,0,80,0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="0.10*"/>
+            <RowDefinition Height="0.15*"/>
+            <RowDefinition Height="0.60*"/>
+            <RowDefinition Height="0.15*"/>
+        </Grid.RowDefinitions>
+
+        <Label></Label>
+
+        <Grid Grid.Row="1">
+            <Border Background="#AA000000" CornerRadius="5" Margin="0,10,0,10">
+                <Border Background="Transparent" BorderThickness="2" BorderBrush="#FF404040" Margin="2" CornerRadius="5">
+                    <Grid>
+                        <TextBox Text="{Binding SearchTerm, UpdateSourceTrigger=PropertyChanged}" 
+                                 Background="Transparent"
+                                 VerticalAlignment="Center"
+                                 FontFamily="Roboto"
+                                 FontSize="24"
+                                 FontStyle="Italic"
+                                 Foreground="White"
+                                 BorderBrush="Transparent"
+                                 Margin="15, 0, 0, 0"
+                                 BorderThickness="0"
+                                 CaretBrush="White"
+                                 AllowDrop="False"
+                                 Panel.ZIndex="1"/>
+                        <Label Content="Select game model..."
+                                   Background="Transparent"
+                                   VerticalAlignment="Center"
+                                   FontFamily="Roboto"
+                                   FontSize="24"
+                                   FontStyle="Italic"
+                                   Foreground="Gray"
+                                   Margin="15, 0, 0, 0"
+                                   BorderThickness="0"
+                                   AllowDrop="False">
+                            <Label.Style>
+                                <Style TargetType="{x:Type Label}">
+                                    <Setter Property="Visibility" Value="Hidden"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SearchTerm}" Value="">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Label.Style>
+                        </Label>
+                    </Grid>
+                </Border>
+            </Border>
+        </Grid>
+
+        <Border Background="#BB000000" CornerRadius="5" Grid.Row="2" Margin="0,10,0,10">
+            <Border Background="Transparent" BorderBrush="#FF404040" BorderThickness="2" Margin="2" CornerRadius="5">
+                <ItemsControl 
+                    x:Name="Items"
+                    ItemsSource="{Binding Characters}"
+                    HorizontalAlignment="Stretch">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VirtualizingStackPanel IsVirtualizing="True"
+                              VirtualizationMode="Recycling" Margin="15, 5, 15, 5"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Style="{StaticResource SearchResult}" 
+                                    Command="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:EnvironmentalSelectorView}}, Path=DataContext.modelButtonClick}" 
+                                    CommandParameter="{Binding ModelIndex}"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+
+                    <ItemsControl.Template>
+                        <ControlTemplate TargetType="ItemsControl">
+                            <Border BorderThickness="{TemplateBinding BorderThickness}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    Background="{TemplateBinding Background}">
+                                <ScrollViewer CanContentScroll="True" 
+                                              Padding="{TemplateBinding Padding}"
+                                              Focusable="False"
+                                              VerticalScrollBarVisibility="Hidden" 
+                                              Margin="0,20,0,20"
+                                              Style="{StaticResource Scroll}" 
+                                              Tag="{Binding scrollState, Mode=TwoWay}" 
+                                              ScrollChanged="ScrollViewer_ScrollChanged">
+                                    <ItemsPresenter/>
+                                </ScrollViewer>
+                            </Border>
+                        </ControlTemplate>
+                    </ItemsControl.Template>
+                </ItemsControl>
+            </Border>
+        </Border>
+
+        <Border Background="#EE000000" CornerRadius="5" Grid.Row="2" Margin="0,10,0,10">
+            <Border Background="Transparent" BorderBrush="#FF404040" BorderThickness="2" Margin="2" CornerRadius="5">
+                <Label Content="Loading..."
+                       FontFamily="Roboto"
+                       FontStyle="Italic"
+                       FontSize="40"
+                       Foreground="White"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"/>
+            </Border>
+
+            <Border.Style>
+                <Style TargetType="{x:Type Border}">
+                    <Setter Property="Visibility" Value="Hidden"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsLoading}" Value="True">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+        </Border>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Button 
+                Width="135" 
+                Content="Confirm" 
+                Grid.Row="3" 
+                Margin="10" 
+                Style="{StaticResource ConnectToServerButton}" 
+                Command="{Binding confirmClick}"
+                IsEnabled="{Binding ConfirmEnabled}"/>
+            <Button 
+                Width="135" 
+                Content="Cancel" 
+                Grid.Row="3" 
+                Margin="10" 
+                Style="{StaticResource ConnectToServerButton}" 
+                Command="{Binding cancelClick}"/>
+        </StackPanel>
+    </Grid>
+</UserControl>

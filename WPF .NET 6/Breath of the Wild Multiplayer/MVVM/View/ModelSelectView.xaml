@@ -1,0 +1,73 @@
+﻿<UserControl x:Class="Breath_of_the_Wild_Multiplayer.MVVM.View.ModelSelectView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:Breath_of_the_Wild_Multiplayer.MVVM.View"
+             xmlns:viewModel="clr-namespace:Breath_of_the_Wild_Multiplayer.MVVM.ViewModel"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800">
+    <UserControl.DataContext>
+        <viewModel:ModelSelectModel/>
+    </UserControl.DataContext>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition/>
+            <ColumnDefinition Width="70"/>
+        </Grid.ColumnDefinitions>
+
+        <Rectangle Grid.Column="1" Fill="#CC1C1C1C" Margin="0,-0.175,0,-0.3"/>
+
+        <Path Stroke="#55FFFFFF" StrokeThickness="2" Panel.ZIndex="1">
+            <Path.Data>
+                <GeometryGroup>
+                    <LineGeometry StartPoint="0,1" EndPoint="1105,1"/>
+                    <LineGeometry StartPoint="1105,1" EndPoint="1115,12"/>
+                    <LineGeometry StartPoint="1115,12" EndPoint="1115,486"/>
+                    <LineGeometry StartPoint="1115,486" EndPoint="1105,496"/>
+                    <LineGeometry StartPoint="0,496" EndPoint="1105,496"/>
+                </GeometryGroup>
+            </Path.Data>
+        </Path>
+
+        <Polygon Fill="#55FFFFFF" Points="0 0,5 0,5 5" Panel.ZIndex="1" HorizontalAlignment="Right"/>
+        <Polygon Fill="#55FFFFFF" Points="0 0,5 0,5 5" Panel.ZIndex="1" HorizontalAlignment="Right" Margin="0,5,0,0"/>
+        <Polygon Fill="#55FFFFFF" Points="0 0,5 0,5 5" Panel.ZIndex="1" HorizontalAlignment="Right" Margin="0,0,5,0"/>
+
+        <Polygon Fill="#55FFFFFF" Points="0 5,5 0,5 5" Panel.ZIndex="1" HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
+        <Polygon Fill="#55FFFFFF" Points="0 5,5 0,5 5" Panel.ZIndex="1" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,5,0"/>
+        <Polygon Fill="#55FFFFFF" Points="0 5,5 0,5 5" Panel.ZIndex="1" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,0,5"/>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="0.65*"/>
+                <ColumnDefinition Width="0.35*"/>
+            </Grid.ColumnDefinitions>
+
+            <Grid>
+                <ScrollViewer VerticalScrollBarVisibility="Hidden" Style="{StaticResource Scroll}" Tag="{Binding scrollState, Mode=TwoWay}" ScrollChanged="ScrollViewer_ScrollChanged" Margin="0,20,0,20">
+                    <ItemsControl HorizontalAlignment="Center" ItemsSource="{Binding Characters}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Margin="15, 5, 15, 5"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Style="{StaticResource CharacterBust}"
+                                        Command="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:ModelSelectView}}, Path=DataContext.modelButtonClick}" 
+                                        CommandParameter="{Binding ModelIndex}"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+
+            <Image x:Name="BodyPicture" Margin="5" Grid.Column="2"/>
+
+            <Label Grid.Column="2" Style="{StaticResource CharacterName}"/>
+        </Grid>
+    </Grid>
+</UserControl>

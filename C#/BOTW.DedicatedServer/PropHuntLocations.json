@@ -1,0 +1,256 @@
+[
+  {
+    "Name": "Kakariko",
+    "HunterStartingPosition": {
+      "x": 1776.921,
+      "y": 237,
+      "z": 984.44684
+    },
+    "HidersStartingPosition": {
+      "x": 1810.4197,
+      "y": 220,
+      "z": 985.5576
+    },
+    "PossibleModels": [
+      "TwnObj_Village_SheikerFurniture_A-00:TwnObj_Village_SheikerFrogStatue_A_01",
+      "TwnObj_Village_SheikerFurniture_A-00:TwnObj_Village_SheikerOutLighting_A_05",
+      "TwnObj_Village_SheikerFurniture_A-01:TwnObj_Village_SheikerBox_A_02",
+      "TwnObj_Village_SheikerFurniture_A-02:TwnObj_Village_SheikerBox_A_01",
+      "TwnObj_Village_SheikerFurniture_A-03:TwnObj_Village_SheikerPlate_A_01",
+      "TwnObj_Village_SheikerFurniture_A-04:TwnObj_Village_SheikerBox_A_04",
+      "TwnObj_Village_SheikerFurniture_A-06:TwnObj_Village_SheikerBox_A_06",
+      "TwnObj_Village_SheikerFurniture_A-08:TwnObj_Village_SheikerBox_A_03",
+      "TwnObj_Village_SheikerFurniture_A-18:TwnObj_Village_SheikerFlowervase_A_01",
+      "TwnObj_Village_SheikerFurniture_A-21:TwnObj_Village_SheikerFlowervase_A_03",
+      "TwnObj_Village_SheikerFurniture_A-22:TwnObj_Village_SheikerFlowervase_A_02",
+      "TwnObj_Village_SheikerPot_A:TwnObj_Village_SheikerPot_A_LL_Act_01",
+      "TwnObj_Village_SheikerPot_A:TwnObj_Village_SheikerPot_A_S_Act_01",
+      "TwnObj_Village_Sheiker_A-00:TwnObj_Village_SheikerBirdClapper_A_03",
+      "TwnObj_Village_Sheiker_A-00:TwnObj_Village_SheikerFence_A_01",
+      "TwnObj_Village_SheikerGrocerySign_A_01",
+      "TwnObj_Village_SheikerHotelSign_A_01",
+      "TwnObj_Village_SheikerPharmacySign_A_01",
+      "TwnObj_Village_SheikerTailorSign_A_01",
+      "TwnObj_Village_SheikerFurniture_A-09:TwnObj_Village_SheikerChest_A_01",
+      "TwnObj_Village_SheikerFurniture_A-10:TwnObj_Village_SheikerChest_A_03",
+      "TwnObj_Village_SheikerFurniture_A-17:TwnObj_Village_SheikerChair_A_01",
+      "TwnObj_Village_SheikerFurniture_A-20:TwnObj_Village_SheikerTable_A_01",
+      "TwnObj_Village_SheikerFurniture_A-25:TwnObj_Village_SheikerBed_A_01",
+      "TwnObj_Village_SheikerFurniture_A-26:TwnObj_Village_SheikerBed_A_02",
+      "Obj_TreePine_A:Obj_TreePine_A_01",
+      "Obj_CookSet_A:CookSet_A",
+      "TwnObj_Village_SheikerFurniture_A:TwnObj_Village_SheikerTorchStand_A_01",
+      "Animal_Kokko:Kokko"
+    ]
+  },
+  {
+    "Name": "GerudoTown",
+    "HunterStartingPosition": {
+      "x": -3762.7722,
+      "y": 150,
+      "z": 2883.909
+    },
+    "HidersStartingPosition": {
+      "x": -3806.7585,
+      "y": 150,
+      "z": 2885.1467
+    },
+    "PossibleModels": [
+      "TwnObj_City_GerudoFurniture_A:TwnObj_City_GerudoClassChair_A_01",
+      "TwnObj_City_GerudoFurniture_A:TwnObj_City_GerudoMayerBed_A_01",
+      "TwnObj_City_GerudoFurniture_A:TwnObj_GerudoAudienceRoomPedestal_A_01",
+      "TwnObj_City_GerudoFurniture_A:TwnObj_GerudoAudienceRoomPedestal_A_01",
+      "TwnObj_City_GerudoFurniture_A:TwnObj_GerudoDollBlue_A_01",
+      "TwnObj_City_GerudoFurniture_A:TwnObj_GerudoDollGreen_A_01",
+      "TwnObj_City_GerudoFurniture_A:TwnObj_Gerudo_HotelBed_A_01",
+      "TwnObj_City_GerudoFurniture_A:TwnObj_Gerudo_Light_A_01",
+      "TwnObj_City_GerudoFurniture_A:TwnObj_Gerudo_Light_A_02",
+      "TwnObj_City_GerudoFurniture_A:TwnObj_Gerudo_Light_A_03",
+      "TwnObj_City_GerudoFurniture_A:TwnObj_Gerudo_Light_A_04",
+      "TwnObj_City_GerudoPot_A:TwnObj_City_GerudoPot_A_LL_Act_02",
+      "TwnObj_City_GerudoPot_A:TwnObj_City_GerudoPot_A_M_Act_01",
+      "TwnObj_City_GerudoPot_A:TwnObj_City_GerudoPot_A_S_Act_01",
+      "TwnObj_City_GerudoBaggage_A:TwnObj_City_GerudoBaggage_A_01",
+      "TwnObj_City_GerudoBaggage_A:TwnObj_City_GerudoBaggage_A_02",
+      "TwnObj_City_GerudoBaggage_A:TwnObj_City_GerudoBaggage_A_03",
+      "TwnObj_City_GerudoBaggage_A:TwnObj_City_GerudoBaggage_A_05",
+      "TwnObj_SmallOasis_A-00:TwnObj_SmallOasisArrowCase_A_01",
+      "TwnObj_SmallOasis_A-00:TwnObj_SmallOasisChair_A_01",
+      "TwnObj_City_Gerudo_A:TwnObj_City_GerudoSighboard_A_01",
+      "TwnObj_City_Gerudo_A:TwnObj_City_GerudoTent_A_01"
+    ]
+  },
+  {
+    "Name": "GoronCity",
+    "HunterStartingPosition": {
+      "x": 1575.2722,
+      "y": 482,
+      "z": -2423.22
+    },
+    "HidersStartingPosition": {
+      "x": 1659.2584,
+      "y": 488.53653,
+      "z": -2442.4885
+    },
+    "PossibleModels": [
+      "TwnObj_City_GoronArtifact_B:TwnObj_City_GoronBox_B_01",
+      "TwnObj_City_GoronArtifact_B:TwnObj_City_GoronLight_B_01",
+      "TwnObj_City_GoronArtifact_B:TwnObj_City_GoronSignboard_B_01",
+      "TwnObj_City_GoronFurniture_A:TwnObj_City_GoronBed_A_01",
+      "TwnObj_City_GoronFurniture_A:TwnObj_City_GoronBed_B_01",
+      "TwnObj_City_GoronFurniture_A:TwnObj_City_GoronBottle_A_01",
+      "TwnObj_City_GoronFurniture_A:TwnObj_City_GoronBottle_A_02",
+      "TwnObj_City_GoronFurniture_A:TwnObj_City_GoronChair_A_01",
+      "TwnObj_City_GoronFurniture_A:TwnObj_City_GoronChair_A_02",
+      "TwnObj_City_GoronFurniture_A:TwnObj_City_GoronChess_A_01",
+      "TwnObj_City_GoronFurniture_A:TwnObj_City_GoronCup_A_01",
+      "TwnObj_City_GoronFurniture_A:TwnObj_City_GoronFlowerBase_A_01",
+      "TwnObj_City_GoronFurniture_A:TwnObj_City_GoronFlowerBase_A_02",
+      "TwnObj_City_GoronFurniture_A:TwnObj_City_GoronHelmet_A_01",
+      "TwnObj_City_GoronFurniture_A:TwnObj_City_GoronHouseholdShinto_A_01",
+      "TwnObj_City_GoronFurniture_A:TwnObj_City_GoronKaraoke_A_01",
+      "TwnObj_City_GoronFurniture_A:TwnObj_City_GoronPickaxe_A_01",
+      "TwnObj_City_GoronFurniture_A:TwnObj_City_GoronTable_A_02",
+      "TwnObj_City_GoronFurniture_A:TwnObj_City_GoronToyDarts_A_01",
+      "TwnObj_City_GoronFurniture_A:TwnObj_City_GoronToy_A_01",
+      "TwnObj_City_GoronFurniture_A:TwnObj_City_GoronToy_A_02",
+      "TwnObj_City_GoronFurniture_A:TwnObj_City_Goronkettle_A_01",
+      "TwnObj_City_GoronPot_A:TwnObj_City_GoronPot_A_M_Act_01",
+      "TwnObj_City_Goron_A-00:TwnObj_City_GoronGuidePost_A_02",
+      "TwnObj_City_Goron_A-00:TwnObj_City_GoronGuidePost_A_03",
+      "TwnObj_City_Goron_A-00:TwnObj_City_GoronHotelLight_A_01",
+      "TwnObj_City_Goron_A-00:TwnObj_City_GoronIronWall_A_01",
+      "TwnObj_City_Goron_A-00:TwnObj_City_GoronLightStone_A_01",
+      "TwnObj_City_Goron_A-00:TwnObj_City_GoronLight_A_02",
+      "TwnObj_City_Goron_A-00:TwnObj_City_GoronLight_A_03",
+      "TwnObj_City_Goron_A-00:TwnObj_City_GoronLight_A_04",
+      "TwnObj_City_Goron_A-00:TwnObj_City_GoronLight_A_05",
+      "TwnObj_City_Goron_A-00:TwnObj_City_GoronRock_A_05",
+      "TwnObj_City_Goron_A-00:TwnObj_City_GoronSmithWorkbench_A_01"
+    ]
+  },
+  {
+    "Name": "YigaBase",
+    "HunterStartingPosition": {
+      "x": -3701.685,
+      "y": 438,
+      "z": 1367.77
+    },
+    "HidersStartingPosition": {
+      "x": -3623.5227,
+      "y": 451,
+      "z": 1378.4105
+    },
+    "PossibleModels": [
+      "FldObj_SecretBase_A-00:FldObj_SecretBaseRockBlock_G_01",
+      "FldObj_SecretBase_A-00:FldObj_SecretBaseFrogStatue_A_01",
+      "FldObj_SecretBase_A-00:FldObj_SecretBaseLamp_A_01",
+      "FldObj_SecretBase_A-00:FldObj_SecretBaseLamp_B_01",
+      "FldObj_SecretBase_A-00:FldObj_SecretBaseLamp_B_02",
+      "FldObj_SecretBase_A-00:FldObj_SecretBasePrisonDoor_A_01",
+      "FldObj_SecretBase_A-00:FldObj_SecretBaseRockBlock_B_01",
+      "FldObj_SecretBase_A-00:FldObj_SecretBaseRockBlock_C_01",
+      "FldObj_SecretBase_A-00:FldObj_SecretBaseRockBlock_D_01",
+      "FldObj_SecretBase_A-00:FldObj_SecretBaseRockBlock_E_01",
+      "FldObj_SecretBase_A-00:FldObj_SecretBase_FenceA_01",
+      "FldObj_SecretBase_A-00:FldObj_SecretBase_TorchStand_A_01",
+      "Obj_FruitBanana_A:Obj_FruitBanana_A_01",
+      "Obj_BoxWood_Desert_A:Obj_BoxWood_Desert_A",
+      "Obj_Barrel_A:Obj_Barrel_Hide_A",
+      "Obj_TBox_Field_Stone:TBox_Field_Stone",
+      "Obj_CookSet_A:CookSet_A",
+      "Obj_Pot_A:Obj_Pot_A_01",
+      "Obj_Barrel_A:Obj_Barrel_A"
+    ]
+  },
+  {
+    "Name": "Lurelin",
+    "HunterStartingPosition": {
+      "x": 2827.8472,
+      "y": 153,
+      "z": 3321.092
+    },
+    "HidersStartingPosition": {
+      "x": 2865.9854,
+      "y": 136,
+      "z": 3474.8728
+    },
+    "PossibleModels": [
+      "TwnObj_Village_Fishing_A-00:TwnObj_Village_FishingBed_A_01",
+      "TwnObj_Village_Fishing_A-00:TwnObj_Village_FishingBoatShopPlate_A_01",
+      "TwnObj_Village_Fishing_A-00:TwnObj_Village_FishingChair_A_01",
+      "TwnObj_Village_Fishing_A-00:TwnObj_Village_FishingFence_A_01",
+      "TwnObj_Village_Fishing_A-00:TwnObj_Village_FishingFence_A_02",
+      "TwnObj_Village_Fishing_A-00:TwnObj_Village_FishingFireTorch_A_01",
+      "TwnObj_Village_Fishing_A-00:TwnObj_Village_FishingFireTorch_A_02",
+      "TwnObj_Village_Fishing_A-00:TwnObj_Village_FishingLamp_A_02",
+      "TwnObj_Village_Fishing_A-00:TwnObj_Village_FishingLongTorch_A_02",
+      "TwnObj_Village_Fishing_A-00:TwnObj_Village_FishingPlantPot_A_01",
+      "TwnObj_Village_Fishing_A-00:TwnObj_Village_FishingPlantPot_A_02",
+      "TwnObj_Village_Fishing_A-00:TwnObj_Village_FishingPole_A_01",
+      "TwnObj_Village_Fishing_A-00:TwnObj_Village_FishingStair_A_01",
+      "TwnObj_Village_Fishing_A-00:TwnObj_Village_FishingTorchPole_A_01",
+      "TwnObj_Village_Fishing_A-00:TwnObj_Village_FishingWoodGard_A_01",
+      "TwnObj_Village_Fishing_A-00:TwnObj_Village_Fishing_Boat_A",
+      "TwnObj_Village_FishingPot_A:TwnObj_Village_FishingPot_M_A_Act_01",
+      "TwnObj_Village_Fishing_A-03:TwnObj_Village_FishingCloset_A_01",
+      "TwnObj_Village_Fishing_A-05:TwnObj_Village_FishingCrowsNest_A_01",
+      "Obj_TreePalmCoconut_A:Obj_TreePalmCoconut_A_01",
+      "Obj_TreePalmCoconut_A:Obj_TreePalmCoconut_A_02",
+      "Obj_BoxWood_Seaside_A:Obj_BoxWood_Seaside_A",
+      "Obj_CookSet_A:CookSet_A",
+      "Obj_Barrel_A:Obj_Barrel_A"
+    ]
+  },
+  {
+    "Name": "Hateno",
+    "HunterStartingPosition": {
+      "x": 3309.5654,
+      "y": 240,
+      "z": 2291.9185
+    },
+    "HidersStartingPosition": {
+      "x": 3384.4749,
+      "y": 228,
+      "z": 2144.905
+    },
+    "PossibleModels": [
+      "TwnObj_Village_Hateno_A-00:TwnObj_Village_HatenoBanner_A_01",
+      "TwnObj_Village_Hateno_A-00:TwnObj_Village_HatenoBanner_A_02",
+      "TwnObj_Village_Hateno_A-00:TwnObj_Village_HatenoWoodLogStair_A_01",
+      "TwnObj_Village_Hateno_A-00:TwnObj_Village_HatenoFence_A_02",
+      "TwnObj_Village_Hateno_A-00:TwnObj_Village_HatenoFence_A_03",
+      "TwnObj_Village_Hateno_A-00:TwnObj_Village_HatenoFence_A_04",
+      "TwnObj_Village_Hateno_A-00:TwnObj_Village_HatenoFence_A_05",
+      "TwnObj_Village_Hateno_A-00:TwnObj_Village_HatenoFence_A_06",
+      "TwnObj_Village_Hateno_A-01:TwnObj_Village_HatenoBanner_A_03",
+      "TwnObj_Village_Hateno_A-01:TwnObj_Village_HatenoBanner_A_04",
+      "TwnObj_Village_Hateno_A-01:TwnObj_Village_HatenoLamp_A_03",
+      "TwnObj_Village_Hateno_A-01:TwnObj_Village_HatenoLinkHouseNamePlate_A_01",
+      "TwnObj_Village_Hateno_A-01:TwnObj_Village_HatenoSignboard_A_01",
+      "TwnObj_Village_Hateno_A-02:TwnObj_Village_HatenoScarecrow_A_01",
+      "TwnObj_Village_Hateno_A-02:TwnObj_Village_HatenoSignboard_A_02",
+      "TwnObj_Village_Hateno_A-02:TwnObj_Village_HatenoSignboard_A_03",
+      "TwnObj_Village_Hateno_A-02:TwnObj_Village_HatenoSignboard_A_04",
+      "TwnObj_Village_Hateno_A-02:TwnObj_Village_HatenoStraw_A_01",
+      "TwnObj_Village_Hateno_A-03:TwnObj_Village_HatenoMessageBoard_A_02",
+      "TwnObj_Village_Hateno_A-04:TwnObj_Village_HatenoMessageBoard_A_01",
+      "TwnObj_Village_Hateno_A-05:TwnObj_Village_HatenoRock_A_03",
+      "TwnObj_Village_Hateno_A-06:TwnObj_Village_HatenoRock_A_02",
+      "TwnObj_Village_Hateno_A-08:TwnObj_Village_HatenoJunkSet_A_02",
+      "TwnObj_Village_Hateno_A-09:TwnObj_Village_HatenoJunkSet_A_03",
+      "TwnObj_Village_Hateno_A-10:TwnObj_Village_HatenoJunkSet_A_04",
+      "TwnObj_Village_Hateno_A-12:TwnObj_Village_HatenoJunkSet_A_01",
+      "TwnObj_Village_Hateno_A-13:TwnObj_Village_HatenoLamp_A_04",
+      "TwnObj_Village_HatenoFurniture_A:TwnObj_Village_HatenoBed_A_01",
+      "TwnObj_Village_HatenoFurniture_A:TwnObj_Village_HatenoBed_A_02",
+      "TwnObj_Village_HatenoFurniture_A:TwnObj_Village_HatenoChair_A_01",
+      "TwnObj_Village_HatenoFurniture_A:TwnObj_Village_HatenoChair_A_02",
+      "TwnObj_Village_HatenoGuidePost_A:TwnObj_Village_AncientCivilLaboSignboard_A_01",
+      "TwnObj_Village_HatenoGuidePost_A:TwnObj_Village_HatenoGuidePost_A_01",
+      "TwnObj_Village_HatenoPot_A:TwnObj_Village_HatenoPot_A_S_Act_01",
+      "TwnObj_Village_HatenoPot_A:TwnObj_Village_HatenoPot_A_M_Act_01",
+      "TwnObj_Village_HatenoPot_A:TwnObj_Village_HatenoPot_A_L_Act_01"
+    ]
+  }
+]

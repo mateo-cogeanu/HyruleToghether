@@ -1,0 +1,33 @@
+﻿<?xml version='1.0' encoding='utf-8'?>
+<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="Breath_of_the_Wild_Multiplayer.Properties" GeneratedClassName="Settings">
+  <Profiles />
+  <Settings>
+    <Setting Name="playerName" Type="System.String" Scope="User">
+      <Value Profile="(Default)">Link</Value>
+    </Setting>
+    <Setting Name="background" Type="System.String" Scope="User">
+      <Value Profile="(Default)">Random</Value>
+    </Setting>
+    <Setting Name="actualBackground" Type="System.String" Scope="User">
+      <Value Profile="(Default)">/Images/mainWindowBackground.png</Value>
+    </Setting>
+    <Setting Name="serversAdded" Type="System.String" Scope="User">
+      <Value Profile="(Default)">[]</Value>
+    </Setting>
+    <Setting Name="backgroundDir" Type="System.String" Scope="User">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="backgroundExt" Type="System.String" Scope="User">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="bcmlLocation" Type="System.String" Scope="User">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="playerModel" Type="System.String" Scope="User">
+      <Value Profile="(Default)">{"Name":"Link","Description":"This model does allow for armor sync.","IsArmorSync":true,"Model":"Jugador1ModelNameLongForASpecificReason","BumiiData":null,"AlternativeModel":"","BustPic":"/Images/Bust/Link.png","BodyPic":"/Images/Body/Link.png","ModelIndex":0,"HasCustomAction":false,"Selected":true,"CustomAction":null}</Value>
+    </Setting>
+    <Setting Name="playAsModel" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
+  </Settings>
+</SettingsFile>

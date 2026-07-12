@@ -1,0 +1,389 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:customControls="clr-namespace:Breath_of_the_Wild_Multiplayer.CustomControls">
+
+    <Style TargetType="TextBox" x:Key="modifiableTextBox">
+
+        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type TextBox}">
+                    <Border Background="#88232323" Margin="15" CornerRadius="5">
+                        <Border Background="Transparent" BorderThickness="2" BorderBrush="#FF9A9A9A" Margin="2" CornerRadius="5">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="0.35*"/>
+                                    <ColumnDefinition Width="0.65*"/>
+                                </Grid.ColumnDefinitions>
+                                <Label Content="{TemplateBinding Tag}"
+                                   VerticalAlignment="Center"
+                                   FontFamily="Roboto"
+                                   FontSize="26"
+                                   FontStyle="Italic"
+                                   Foreground="{TemplateBinding Foreground}"
+                                   Margin="15, 0, 0, 0"/>
+                                <Border Background="#AA000000" Grid.Column="1" Margin="10" CornerRadius="3">
+                                    <Border Background="Transparent" BorderBrush="#FF404040" BorderThickness="2" Margin="2">
+                                        <TextBox Text="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Text, Mode=TwoWay}" 
+                                             Background="Transparent"
+                                             VerticalAlignment="Center"
+                                             FontFamily="Roboto"
+                                             FontSize="24"
+                                             FontStyle="Italic"
+                                             Foreground="White"
+                                             BorderBrush="Transparent"
+                                             Margin="15, 0, 0, 0"
+                                             BorderThickness="0"
+                                             CaretBrush="White"
+                                             MaxLength="{TemplateBinding MaxLength}"
+                                             AllowDrop="False"/>
+                                    </Border>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+
+        <Style.Triggers>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="Gray"/>
+            </Trigger>
+        </Style.Triggers>
+
+    </Style>
+
+    <Style TargetType="CheckBox" x:Key="customCheckbox">
+        <Setter Property="Background" Value="#AA000000"/>
+        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="BorderBrush" Value="#FF626262"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type CheckBox}">
+                    <Border Background="#88232323" Margin="15" CornerRadius="5">
+                        <Border Background="Transparent" BorderThickness="2" BorderBrush="#FF9A9A9A" Margin="2" CornerRadius="5">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="0.35*"/>
+                                    <ColumnDefinition Width="0.65*"/>
+                                </Grid.ColumnDefinitions>
+                                <Label Content="{TemplateBinding Content}"
+                                       VerticalAlignment="Center"
+                                       FontFamily="Roboto"
+                                       FontSize="26"
+                                       FontStyle="Italic"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       Margin="15, 0, 0, 0"/>
+                                <Border Background="{TemplateBinding Background}" Grid.Column="1" Margin="10" CornerRadius="3">
+                                    <Border Background="Transparent" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="2" Margin="2">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="0.6*"/>
+                                                <ColumnDefinition Width="0.4*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <Border
+                                                CornerRadius="0, 3, 3, 0"
+                                                HorizontalAlignment="Stretch"
+                                                Grid.Column="0">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="Transparent"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding EnableCustomModels}" Value="True">
+                                                                <Setter Property="Background" Value="#CCFFFFFF"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                
+                                                <Label Content="ON"
+                                                       HorizontalAlignment="Stretch"
+                                                       HorizontalContentAlignment="Center"
+                                                       FontFamily="Roboto"
+                                                       FontSize="22"
+                                                       FontStyle="Italic"
+                                                       Foreground="White">
+
+                                                    <Label.Effect>
+                                                        <DropShadowEffect Color="Black" ShadowDepth="0" Opacity="1" BlurRadius="20"/>
+                                                    </Label.Effect>
+                                                </Label>
+                                            </Border>
+
+                                            <Border
+                                                CornerRadius="3, 0, 0, 3"
+                                                HorizontalAlignment="Stretch"
+                                                Grid.Column="1">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="Transparent"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding EnableCustomModels}" Value="False">
+                                                                <Setter Property="Background" Value="#CCFFFFFF"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+
+                                                <Label Content="OFF"
+                                                       HorizontalAlignment="Stretch"
+                                                       HorizontalContentAlignment="Center"
+                                                       FontFamily="Roboto"
+                                                       FontSize="22"
+                                                       FontStyle="Italic"
+                                                       Foreground="White">
+
+                                                    <Label.Effect>
+                                                        <DropShadowEffect Color="Black" ShadowDepth="0" Opacity="1" BlurRadius="20"/>
+                                                    </Label.Effect>
+                                                </Label>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+
+        <Style.Triggers>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="BorderBrush" Value="#FF808080"/>
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#CC000000"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style TargetType="customControls:optionsLabel" x:Key="optionsCustomLabel">
+
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type customControls:optionsLabel}">
+                    <Border Background="#88232323" Margin="15" CornerRadius="5">
+                        <Border Background="Transparent" BorderThickness="2" BorderBrush="#FF9A9A9A" Margin="2" CornerRadius="5">
+                            <Grid>
+
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="0.35*"/>
+                                    <ColumnDefinition Width="0.65*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Label Content="{TemplateBinding Tag}"
+                                   VerticalAlignment="Center"
+                                   FontFamily="Roboto"
+                                   FontSize="26"
+                                   FontStyle="Italic"
+                                   Foreground="White"
+                                   Margin="15, 0, 0, 0"/>
+
+                                <Border Background="#AA000000" Grid.Column="1" Margin="10" CornerRadius="3">
+
+                                    <Border Background="Transparent" BorderBrush="#FF404040" BorderThickness="2" Margin="2">
+
+                                        <Grid>
+
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="0.15*"/>
+                                                <ColumnDefinition/>
+                                                <ColumnDefinition Width="0.15*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <Button Command="{TemplateBinding leftButton}" Foreground="White" Background="DimGray">
+
+                                                <Button.Style>
+                                                    <Style TargetType="Button">
+                                                        <Setter Property="Template">
+                                                            <Setter.Value>
+                                                                <ControlTemplate TargetType="Button">
+                                                                    <Border Background="DimGray" CornerRadius="2" Margin="1">
+                                                                        <Border>
+                                                                            <Path Width="10" Height="10" Stretch="Fill" Stroke="White" Fill="White" Data="F1 M 287.328,237.333L 319.344,255.818L 319.344,218.849L 287.328,237.333 Z "/>
+                                                                        </Border>
+                                                                    </Border>
+                                                                </ControlTemplate>
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                    </Style>
+                                                </Button.Style>
+
+                                            </Button>
+
+                                            <customControls:optionsLabel Content="{TemplateBinding Content}" Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="center" movingLeft="{TemplateBinding movingLeft}" movingRight="{TemplateBinding movingRight}">
+
+                                                <customControls:optionsLabel.Style>
+                                                    <Style TargetType="customControls:optionsLabel">
+
+                                                        <Setter Property="Foreground" Value="White"/>
+                                                        <Setter Property="FontFamily" Value="Roboto"/>
+                                                        <Setter Property="FontSize" Value="22"/>
+                                                        <Setter Property="FontStyle" Value="Italic"/>
+
+                                                        <Style.Triggers>
+                                                            <Trigger Property="movingLeft" Value="true">
+                                                                <Trigger.EnterActions>
+                                                                    <BeginStoryboard>
+                                                                        <Storyboard>
+                                                                            <ThicknessAnimation Storyboard.TargetProperty="Margin" Duration="0:0:0.3" FillBehavior="Stop" To="100,0,-100,0"/>
+                                                                            <DoubleAnimation Storyboard.TargetProperty="Opacity" Duration="0:0:0.31" FillBehavior="Stop" To="0"/>
+                                                                            <ThicknessAnimation Storyboard.TargetProperty="Margin" Duration="0:0:0.4" BeginTime="0:0:0.3" FillBehavior="Stop" From="-100,0,100,0" To="0,0,0,0"/>
+                                                                        </Storyboard>
+                                                                    </BeginStoryboard>
+                                                                </Trigger.EnterActions>
+                                                            </Trigger>
+
+                                                            <Trigger Property="movingRight" Value="true">
+                                                                <Trigger.EnterActions>
+                                                                    <BeginStoryboard>
+                                                                        <Storyboard>
+                                                                            <ThicknessAnimation Storyboard.TargetProperty="Margin" Duration="0:0:0.3" FillBehavior="Stop" To="-100,0,100,0"/>
+                                                                            <DoubleAnimation Storyboard.TargetProperty="Opacity" Duration="0:0:0.31" FillBehavior="Stop" To="0"/>
+                                                                            <ThicknessAnimation Storyboard.TargetProperty="Margin" Duration="0:0:0.4" BeginTime="0:0:0.3" FillBehavior="Stop" From="100,0,-100,0" To="0,0,0,0"/>
+                                                                        </Storyboard>
+                                                                    </BeginStoryboard>
+                                                                </Trigger.EnterActions>
+                                                            </Trigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </customControls:optionsLabel.Style>
+                                            </customControls:optionsLabel>
+                                            <Button Content="&gt;" Grid.Column="2" Command="{TemplateBinding rightButton}">
+                                                <Button.Style>
+                                                    <Style TargetType="Button">
+                                                        <Setter Property="Template">
+                                                            <Setter.Value>
+                                                                <ControlTemplate TargetType="Button">
+                                                                    <Border Background="DimGray" CornerRadius="2" Margin="1">
+                                                                        <Border>
+                                                                            <Path Width="10" Height="10" Stretch="Fill" Stroke="White" Fill="White" Data="F1 M 319.344,237.333L 287.328,218.849L 287.328,255.818L 319.344,237.333 Z "/>
+                                                                        </Border>
+                                                                    </Border>
+                                                                </ControlTemplate>
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+
+    </Style>
+    
+    <Style TargetType="Button" x:Key="customButton">
+        <Setter Property="Background" Value="#AA000000"/>
+        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="BorderBrush" Value="#FF404040"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Button}">
+                    <Border Background="#88232323" Margin="15" CornerRadius="5">
+                        <Border Background="Transparent" BorderThickness="2" BorderBrush="#FF9A9A9A" Margin="2" CornerRadius="5">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="0.35*"/>
+                                    <ColumnDefinition Width="0.65*"/>
+                                </Grid.ColumnDefinitions>
+                                <Label Content="{TemplateBinding Tag}"
+                                   VerticalAlignment="Center"
+                                   FontFamily="Roboto"
+                                   FontSize="26"
+                                   FontStyle="Italic"
+                                   Foreground="White"
+                                   Margin="15, 0, 0, 0"
+                                   IsHitTestVisible="False"/>
+                                <Border Background="{TemplateBinding Background}" Grid.Column="1" Margin="10" CornerRadius="3">
+                                    <Border Background="Transparent" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="2" Margin="2">
+                                        <Label Content="{TemplateBinding Content}" 
+                                           Background="Transparent"
+                                           VerticalAlignment="Center"
+                                           HorizontalAlignment="Center"
+                                           FontFamily="Roboto"
+                                           FontSize="22"
+                                           FontStyle="Italic"
+                                           Foreground="White"
+                                           BorderBrush="Transparent"
+                                           BorderThickness="0"/>
+                                    </Border>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="BorderBrush" Value="#FF808080"/>
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#CC000000"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style TargetType="Label" x:Key="creditsLabel">
+        <Setter Property="FontFamily" Value="Roboto"/>
+        <Setter Property="FontStyle" Value="Italic"/>
+        <Setter Property="FontSize" Value="21"/>
+        <Setter Property="Foreground" Value="White"/>
+
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect ShadowDepth="0"
+                                  Color="Black"
+                                  Opacity="1"
+                                  BlurRadius="20"/>
+            </Setter.Value>
+        </Setter>
+
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Label">
+                    <DockPanel>
+                        <ContentPresenter VerticalAlignment="Center"/>
+                        <Label HorizontalAlignment="Right" Content="{TemplateBinding Tag}"
+                               VerticalAlignment="Center"
+                               FontFamily="Roboto"
+                               FontStyle="Italic"
+                               FontSize="21"
+                               Foreground="White"/>
+                    </DockPanel>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+
+    </Style>
+
+    <Style TargetType="{x:Type ToolTip}" x:Key="customTooltip">
+        <Setter Property="OverridesDefaultStyle" Value="True"/>
+        <Setter Property="Visibility" Value="Visible"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToolTip">
+                    <Border Background="#CC000000" CornerRadius="10">
+                        <Border Margin="2" CornerRadius="10" Background="Transparent" BorderThickness="2" BorderBrush="#FF626262">
+                            <Label Content="{TemplateBinding Content}"
+                               Foreground="White"
+                               FontFamily="Roboto"
+                               FontStyle="Italic"
+                               FontSize="12"/>
+                        </Border>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

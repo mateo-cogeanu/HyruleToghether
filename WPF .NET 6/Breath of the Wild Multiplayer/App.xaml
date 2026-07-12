@@ -1,0 +1,69 @@
+﻿<Application x:Class="Breath_of_the_Wild_Multiplayer.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:Breath_of_the_Wild_Multiplayer"
+             xmlns:viewModel="clr-namespace:Breath_of_the_Wild_Multiplayer.MVVM.ViewModel"
+             xmlns:view="clr-namespace:Breath_of_the_Wild_Multiplayer.MVVM.View"
+             xmlns:customControls="clr-namespace:Breath_of_the_Wild_Multiplayer.CustomControls"
+             StartupUri="MainWindow.xaml">
+    
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme\ToolbarButtons.xaml"/>
+                <ResourceDictionary Source="Theme\ServerButton.xaml"/>
+                <ResourceDictionary Source="Theme\TitleAnimations.xaml"/>
+                <ResourceDictionary Source="Theme\settingsButtons.xaml"/>
+                <ResourceDictionary Source="Theme\Images.xaml"/>
+                <ResourceDictionary Source="Theme\CharacterSelection.xaml"/>
+                <ResourceDictionary Source="Theme\LoadingControl.xaml"/>
+                <ResourceDictionary Source="Theme\MinigameTimer.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <DataTemplate DataType="{x:Type viewModel:MainMenuModel}">
+                <view:MainMenuView/>
+            </DataTemplate>
+
+            <DataTemplate DataType="{x:Type viewModel:IngameMenuModel}">
+                <view:IngameMenuView/>
+            </DataTemplate>
+
+            <DataTemplate DataType="{x:Type viewModel:ServerBrowserModel}">
+                <view:ServerBrowser/>
+            </DataTemplate>
+
+            <DataTemplate DataType="{x:Type viewModel:SettingsPanelModel}">
+                <view:SettingsPanelView/>
+            </DataTemplate>
+
+            <DataTemplate DataType="{x:Type viewModel:serverInterfaceModel}">
+                <view:serverInterfaceView/>
+            </DataTemplate>
+
+            <DataTemplate DataType="{x:Type viewModel:ServerEditorModel}">
+                <view:ServerEditorView/>
+            </DataTemplate>
+
+            <DataTemplate DataType="{x:Type viewModel:ErrorMessageModel}">
+                <view:ErrorMessageView/>
+            </DataTemplate>
+
+            <DataTemplate DataType="{x:Type viewModel:LoadingModel}">
+                <view:LoadingView/>
+            </DataTemplate>
+
+            <DataTemplate DataType="{x:Type viewModel:ChangeNameModel}">
+                <view:ChangeNameView/>
+            </DataTemplate>
+
+            <DataTemplate DataType="{x:Type viewModel:ModelSelectModel}">
+                <view:ModelSelectView/>
+            </DataTemplate>
+
+            <DataTemplate DataType="{x:Type viewModel:EnvironmentalSelectorModel}">
+                <view:EnvironmentalSelectorView/>
+            </DataTemplate>
+
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

@@ -1,0 +1,24 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Style x:Key="MinigameTimerStyle" TargetType="Label">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Label">
+                    <Border Background="#66000000" CornerRadius="20">
+                        <Label 
+                            Content="{TemplateBinding Content}"
+                            Foreground="White"
+                            FontFamily="Roboto"
+                            FontWeight="Bold"
+                            FontStyle="Italic"
+                            FontSize="26"
+                            Padding="60,0,60,0"
+                        />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    
+</ResourceDictionary>

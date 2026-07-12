@@ -1,0 +1,66 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <BaseOutputPath></BaseOutputPath>
+    <AssemblyName>MBL.DedicatedServer</AssemblyName>
+	<OutputPath>..\..\Build\DedicatedServer</OutputPath>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <DebugType>full</DebugType>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <DebugType>full</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="AppdataFiles\ArmorMapping.txt" />
+    <None Remove="AppdataFiles\QuestFlagsNames.txt" />
+    <None Remove="ServerConfig.ini" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Multiplayer_App_Icon_Server.ico" />
+    <Content Include="ServerConfig.ini">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="AppdataFiles\ArmorMapping.txt" />
+    <EmbeddedResource Include="AppdataFiles\QuestFlagsNames.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BOTW.Logging\BOTWM.Logging.csproj" />
+    <ProjectReference Include="..\BOTWM.Server\BOTWM.Server.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Gamemodes.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Landmarks.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="PropHuntLocations.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+	<PropertyGroup>
+		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+		<AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+		<ApplicationIcon>Multiplayer_App_Icon_Server.ico</ApplicationIcon>
+	</PropertyGroup>
+
+</Project>

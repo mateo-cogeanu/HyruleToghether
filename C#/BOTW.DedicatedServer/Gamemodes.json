@@ -1,0 +1,80 @@
+﻿[
+  {
+    "SettingsName": "Game Completion",
+    "EnemySync": true,
+    "GameMode": "NoGamemode",
+    "QuestSyncSettings": {
+      "Vanilla": false,
+      "Koroks": true,
+      "Towers": true,
+      "Shrines": true,
+      "Locations": true,
+      "DivineBeast": false
+    }
+  },
+  {
+    "SettingsName": "Hunter Vs Speedrunner",
+    "EnemySync": true,
+    "GameMode": "HunterVsSpeedrunner",
+    "QuestSyncSettings": {
+      "Vanilla": false,
+      "Koroks": false,
+      "Towers": true,
+      "Shrines": true,
+      "Locations": true,
+      "DivineBeast": false
+    }
+  },
+  {
+    "SettingsName": "Any% Speedrun",
+    "EnemySync": true,
+    "GameMode": "NoGamemode",
+    "QuestSyncSettings": {
+      "Vanilla": false,
+      "Koroks": false,
+      "Towers": true,
+      "Shrines": true,
+      "Locations": true,
+      "DivineBeast": false
+    }
+  },
+  {
+    "SettingsName": "Hide n' seek",
+    "EnemySync": true,
+    "GameMode": "NoGamemode",
+    "QuestSyncSettings": {
+      "Vanilla": false,
+      "Koroks": false,
+      "Towers": false,
+      "Shrines": false,
+      "Locations": false,
+      "DivineBeast": false
+    }
+  },
+  {
+    "SettingsName": "Death Swap",
+    "EnemySync": false,
+    "GameMode": "DeathSwap",
+    "QuestSyncSettings": {
+      "Vanilla": false,
+      "Koroks": false,
+      "Towers": false,
+      "Shrines": false,
+      "Locations": false,
+      "DivineBeast": false
+    }
+  },
+  {
+    "SettingsName": "Prop hunt",
+    "EnemySync": false,
+    "GameMode": "PropHunt",
+    "QuestSyncSettings": {
+      "Vanilla": false,
+      "Koroks": false,
+      "Towers": false,
+      "Shrines": false,
+      "Locations": false,
+      "DivineBeast": false
+    }
+  }
+]
