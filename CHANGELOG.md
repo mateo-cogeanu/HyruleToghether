@@ -54,6 +54,8 @@ All notable changes made while turning the original Windows-only Milk Bar Launch
 
 - Updated the port for current native Cemu rather than relying on the old Windows injection model.
 - Added a reproducible Cemu patching flow.
+- Fixed the reproducible Cemu patcher to resolve the Metal shader implementation relative to its supplied header path, allowing clean one-command bundles to apply the sampler patch successfully.
+- Added Pillow as an explicit packaging dependency so PyInstaller can convert the launcher PNG icon to the native macOS ICNS format during clean builds.
 - Exported `memory_getBase` and the HLE registration entry points required by the native client.
 - Added explicit Cemu readiness and hook-readiness synchronization so the client registers callbacks only after coreinit HLE initialization is complete.
 - Added support for client-provided HLE-only pseudo modules, enabling the UKMM actor hooks to resolve on native Cemu.

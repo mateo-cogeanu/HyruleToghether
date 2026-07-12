@@ -206,7 +206,7 @@ elif new_sampler not in msl:
     raise SystemExit("Cemu's Metal sampler mapping changed; update scripts/patch-cemu.sh")
 msl_header.write_text(msl)
 
-msl_cpp = root / "src/Cafe/HW/Latte/LegacyShaderDecompiler/LatteDecompilerEmitMSL.cpp"
+msl_cpp = msl_header.with_name("LatteDecompilerEmitMSL.cpp")
 cpp = msl_cpp.read_text()
 cpp = cpp.replace('src->addFmt("(samplr{}, ", texInstruction->textureFetch.textureIndex);',
                   'src->addFmt("(samplr{}, ", shaderContext->output->resourceMappingMTL.textureUnitToBindingPoint[texInstruction->textureFetch.textureIndex] % 16);')
