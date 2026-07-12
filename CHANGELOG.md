@@ -26,6 +26,7 @@ All notable changes made while turning the original Windows-only Milk Bar Launch
 - Added native component build scripts for the client, server, model builder, UKMM tool, and patched Cemu.
 - Added setup and launcher scripts for development use.
 - Made `build-bundled-launcher.sh` fully self-bootstrapping: it now creates the local Python virtual environment and installs all packaging requirements before building, eliminating the separate setup command for distributable builds.
+- Added Linux Cemu display-backend detection: builds include Wayland when `wayland-protocols >= 1.15` is installed and automatically fall back to X11/XWayland when it is missing, preventing late CMake configuration failures.
 
 ### Native launcher and setup experience
 

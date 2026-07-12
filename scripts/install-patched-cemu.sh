@@ -56,6 +56,16 @@ for tool in git cmake ninja; do
   command -v "$tool" >/dev/null || { echo "Missing build dependency: $tool" >&2; exit 1; }
 done
 
+if [[ "$host_os" == "Linux" ]]; then
+  if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists 'wayland-protocols >= 1.15'; then
+    platform_flags=(-DENABLE_WAYLAND=ON)
+    echo "Cemu Linux backend: Wayland and X11 (wayland-protocols detected)."
+  else
+    platform_flags=(-DENABLE_WAYLAND=OFF)
+    echo "Cemu Linux backend: X11/XWayland (wayland-protocols not installed)."
+  fi
+fi
+
 if [[ ! -d "$source_root/.git" ]]; then
   mkdir -p "$(dirname "$source_root")"
   git clone --recursive https://github.com/cemu-project/Cemu.git "$source_root"

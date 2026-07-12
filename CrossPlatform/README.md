@@ -57,6 +57,11 @@ packages used by Cemu. On Linux, install the packages listed in upstream
 `CrossPlatform/requirements.txt`. The macOS builder can create its portable
 application bundle directly when PyInstaller is unavailable.
 
+On Linux, the Cemu build automatically detects `wayland-protocols >= 1.15`.
+When available it includes native Wayland and X11 support; when absent it
+selects X11-only automatically, which remains usable on Wayland desktops via
+XWayland, instead of failing during CMake configuration.
+
 ## Build and configure
 
 Requirements are CMake, a C++17 compiler, Python 3.9 or newer, and `curl`.
