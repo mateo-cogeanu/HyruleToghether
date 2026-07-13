@@ -57,7 +57,7 @@
 	typedef void (*osLib_registerHLEFunctionType)(const char* libraryName, const char* functionName, void(*osFunction)(PPCInterpreter_t* hCPU));
 
 
-#pragma pack(1)
+#pragma pack(push, 1)
 	extern struct TransferableData { // This is reversed compared to the gfx pack because we read as big endian.
 		int f_r10;
 		int f_r9;
@@ -72,17 +72,25 @@
 
 		int fnAddr;
 
-		byte bytepadding[2];
 		bool interceptRegisters;
 
 		bool enabled;
 	};
 
-#pragma pack(1)
 	extern struct InstanceData {
 		char name[152]; // We'll allocate all unused storage for use for name storage.. just in case of a really long actor name
 		uint8_t actorStorage[104];
 	};
+#pragma pack(pop)
+
+// The PPC graphic-pack storage is exactly 42 bytes. memory_writeMemoryBE()
+// reverses this complete structure, so even one padding byte moves every
+// function/register field to the wrong emulated address.
+static_assert(sizeof(TransferableData) == 42, "Spawn transfer layout must match patch_SpawnActors.asm");
+static_assert(offsetof(TransferableData, fnAddr) == 36, "Spawn function address offset changed");
+static_assert(offsetof(TransferableData, interceptRegisters) == 40, "Spawn intercept flag offset changed");
+static_assert(offsetof(TransferableData, enabled) == 41, "Spawn enabled flag offset changed");
+static_assert(sizeof(InstanceData) == 256, "Spawn instance ring entry must remain 256 bytes");
 
 	extern struct QueueActor {
 		float PosX;
