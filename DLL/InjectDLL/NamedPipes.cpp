@@ -37,6 +37,13 @@ void namedPipeClass::createServer()
     SOCKET socketFd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (socketFd == INVALID_SOCKET)
         throw std::runtime_error("Could not create Milk Bar IPC socket");
+#ifdef __APPLE__
+    int noSigPipe = 1;
+    if (setsockopt(socketFd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, sizeof(noSigPipe)) != 0) {
+        closesocket(socketFd);
+        throw std::runtime_error("Could not configure Milk Bar IPC socket");
+    }
+#endif
 
     sockaddr_un endpoint{};
     endpoint.sun_family = AF_UNIX;

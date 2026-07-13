@@ -231,7 +231,14 @@ inline BOOL ReadFile(HANDLE handle, void* buffer, DWORD length, DWORD* readCount
 }
 
 inline BOOL WriteFile(HANDLE handle, const void* buffer, DWORD length, DWORD* writtenCount, void*) {
-    const auto count = ::write(static_cast<int>(handle), buffer, length);
+#ifdef MSG_NOSIGNAL
+    const auto count = ::send(static_cast<int>(handle), buffer, length, MSG_NOSIGNAL);
+#else
+    // macOS sockets used by the launcher have SO_NOSIGPIPE enabled when they
+    // are created, so a disconnected launcher becomes an EPIPE result rather
+    // than terminating all of Cemu with SIGPIPE.
+    const auto count = ::send(static_cast<int>(handle), buffer, length, 0);
+#endif
     if (writtenCount) *writtenCount = count > 0 ? static_cast<DWORD>(count) : 0;
     return count == static_cast<ssize_t>(length);
 }

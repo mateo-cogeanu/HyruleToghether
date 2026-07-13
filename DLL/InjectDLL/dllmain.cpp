@@ -102,53 +102,50 @@ bool startServerLoop()
 
 void readInstruction()
 {
-
-    bool success = false;
-    DWORD read;
     bool started = false;
 
     while (!started)
     {
-        TCHAR chBuff[BUFF_SIZE];
-        TCHAR responsePositive[BUFF_SIZE] = "Succeeded";
-        TCHAR responseNegative[BUFF_SIZE] = "Failed";
+        TCHAR chBuff[BUFF_SIZE]{};
+        DWORD read = 0;
         bool response = false;
 
-        do
+        if (!ReadFile(namedPipe->hPipe, chBuff, (BUFF_SIZE - 1) * sizeof(TCHAR), &read, nullptr)) {
+            Logging::LoggerService::LogError("Launcher IPC closed while waiting for an instruction", __FUNCTION__);
+            return;
+        }
+        chBuff[std::min<DWORD>(read, BUFF_SIZE - 1)] = '\0';
+        const std::string instruction(chBuff, strnlen(chBuff, BUFF_SIZE));
+
+        if (instruction.find("!connect") != std::string::npos)
         {
-            success = ReadFile(namedPipe->hPipe, chBuff, BUFF_SIZE * sizeof(TCHAR), &read, nullptr);
-            
-            if (strstr(chBuff, "!connect"))
-            {
-                response = Main::connectToServer(chBuff);
-                memset(chBuff, 0, sizeof(chBuff));
-
-                Logging::LoggerService::LogInformation("Connected to server successfully");
-            }
-            else if (strstr(chBuff, "!startServerLoop"))
-            {
-                Logging::LoggerService::LogInformation("Start server loop requested...");
-
-                if (!started)
-                {
-                    response = true;
-                    started = true;
-                }
-                else
-                {
-                    exit(1);
-                }
-            }
-
+            response = Main::connectToServer(instruction);
             if (response)
+                Logging::LoggerService::LogInformation("Connected to server successfully");
+            else
+                Logging::LoggerService::LogError("Server rejected the connection request", __FUNCTION__);
+        }
+        else if (instruction.find("!startServerLoop") != std::string::npos)
+        {
+            Logging::LoggerService::LogInformation("Start server loop requested...");
+
+            if (!started)
             {
-                success = WriteFile(namedPipe->hPipe, responsePositive, BUFF_SIZE * sizeof(TCHAR), &read, nullptr);
+                response = true;
+                started = true;
             }
             else
             {
-                success = WriteFile(namedPipe->hPipe, responseNegative, BUFF_SIZE * sizeof(TCHAR), &read, nullptr);
+                return;
             }
-        } while (!success);
+        }
+
+        const char* reply = response ? "Succeeded" : "Failed";
+        DWORD written = 0;
+        if (!WriteFile(namedPipe->hPipe, reply, static_cast<DWORD>(std::strlen(reply) + 1), &written, nullptr)) {
+            Logging::LoggerService::LogError("Launcher IPC closed before the instruction reply was delivered", __FUNCTION__);
+            return;
+        }
 
     }
 
