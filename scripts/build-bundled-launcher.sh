@@ -54,6 +54,7 @@ rm -rf "$staging/runtime/server/Logs" "$staging/runtime/server/LatestLog.txt"
 cp "$root/BNP Files/MilkBarLauncher.bnp" "$staging/runtime/mod/"
 (cd "$staging/runtime/mod" && cmake -E tar xvf MilkBarLauncher.bnp >/dev/null)
 cp "$root/CrossPlatform/patch_BeltLookupGuard.asm" "$staging/runtime/mod/patches/"
+"$python" "$root/scripts/patch-spawn-owner.py" "$staging/runtime/mod/patches/patch_SpawnActors.asm"
 rm -rf "$staging/runtime/mod/content" "$staging/runtime/mod/logs" "$staging/runtime/mod/info.json"
 cp "$root/Build/ukmm/$target/ukmm" "$root/Build/ukmm/$target/UKMM-LICENSE" "$staging/runtime/tools/"
 cp "$root/Build/model-builder/$server_rid/milkbar-model-builder" "$staging/runtime/tools/"

@@ -405,8 +405,14 @@ def install_bundled_mod(config: dict[str, Any], force: bool = False) -> Path:
     if not aoc_content.is_dir():
         aoc_content = None
 
+    patch_source = archive.parent / "patches"
+    patches = sorted(patch_source.glob("patch_*.asm"))
+    if not patches:
+        raise RuntimeError("The bundled Hyrule Together code patches are missing")
     signature_data = [archive.read_bytes(), model_builder.read_bytes(),
                       str(update_root.stat().st_mtime_ns).encode()]
+    for patch in patches:
+        signature_data.extend((patch.name.encode(), patch.read_bytes()))
     if aoc_content:
         signature_data.append(str(dlc_root.stat().st_mtime_ns).encode())
     signature = hashlib.sha256(b"\0".join(signature_data)).hexdigest()
@@ -481,10 +487,6 @@ def install_bundled_mod(config: dict[str, Any], force: bool = False) -> Path:
     animation_path = output_pack / "content" / "Model" / "Player_Animation_NoFace.sbfres"
     if not animation_path.is_file() or animation_path.stat().st_size < 1024:
         raise RuntimeError("Hyrule Together player model creation did not produce Player_Animation_NoFace.sbfres")
-    patch_source = archive.parent / "patches"
-    patches = sorted(patch_source.glob("patch_*.asm"))
-    if not patches:
-        raise RuntimeError("The bundled Hyrule Together code patches are missing")
     for patch in patches:
         shutil.copy2(patch, output_pack / patch.name)
     marker.write_text(signature, encoding="utf-8")

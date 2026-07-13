@@ -71,6 +71,7 @@
 		int ringPtr;
 
 		int fnAddr;
+		int ownerStack;
 
 		// patch_SpawnActors.asm aligns the following .int fields to four
 		// bytes after its two one-byte flags.  Because this native structure
@@ -87,15 +88,16 @@
 	};
 #pragma pack(pop)
 
-// The PPC assembler aligns FunctionToJump to four bytes after Enabled and
-// InterceptRegisters, making the graphic-pack storage exactly 44 bytes.
-// memory_writeMemoryBE() reverses this complete structure, so the native
-// representation must retain the corresponding two padding bytes.
-static_assert(sizeof(TransferableData) == 44, "Spawn transfer layout must match patch_SpawnActors.asm");
+// The PPC assembler aligns SpawnOwnerStack to four bytes after Enabled and
+// InterceptRegisters. With that owner token the graphic-pack storage is 48
+// bytes. memory_writeMemoryBE() reverses this complete structure, so the
+// native representation must retain the corresponding two padding bytes.
+static_assert(sizeof(TransferableData) == 48, "Spawn transfer layout must match patch_SpawnActors.asm");
 static_assert(offsetof(TransferableData, fnAddr) == 36, "Spawn function address offset changed");
-static_assert(offsetof(TransferableData, bytepadding) == 40, "Spawn alignment padding changed");
-static_assert(offsetof(TransferableData, interceptRegisters) == 42, "Spawn intercept flag offset changed");
-static_assert(offsetof(TransferableData, enabled) == 43, "Spawn enabled flag offset changed");
+static_assert(offsetof(TransferableData, ownerStack) == 40, "Spawn owner offset changed");
+static_assert(offsetof(TransferableData, bytepadding) == 44, "Spawn alignment padding changed");
+static_assert(offsetof(TransferableData, interceptRegisters) == 46, "Spawn intercept flag offset changed");
+static_assert(offsetof(TransferableData, enabled) == 47, "Spawn enabled flag offset changed");
 static_assert(sizeof(InstanceData) == 256, "Spawn instance ring entry must remain 256 bytes");
 
 	extern struct QueueActor {
@@ -258,6 +260,9 @@ void setupActor(PPCInterpreter_t* hCPU, TransferableData& trnsData, InstanceData
 	hCPU->gpr[9] = 1;
 	hCPU->gpr[10] = 0;
 	trnsData.fnAddr = 0x037b6040; // Address to call to
+	// CallFunction can run concurrently on all three emulated PPC cores. Only
+	// this invocation owns the parameter registers prepared above.
+	trnsData.ownerStack = hCPU->gpr[1];
 
 	trnsData.enabled = true; // This tells the assembly patch to trigger one function call
 	Logging::LoggerService::LogDebug("Submitted actor " + qAct.Name + " to BOTW's spawn function.", __FUNCTION__);
@@ -312,7 +317,11 @@ void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBu
 			return;
 		trnsData.ringPtr = startRingBuffer;
 	}
-	trnsData.interceptRegisters = true; // Just make sure to intercept stuff.. if we don't do this all the time when you warp somewhere else spawns cause it to crash
+	// Do not re-enable register interception while another PPC core owns a
+	// pending synthetic call. Otherwise that call would overwrite the natural
+	// actor-factory template with its own parameters before it can run.
+	if (!trnsData.enabled)
+		trnsData.interceptRegisters = true;
 
 	queue_mutex.lock(); ////////////////////////////////////////////
 	// Actual actor spawning - just read from queue here.
