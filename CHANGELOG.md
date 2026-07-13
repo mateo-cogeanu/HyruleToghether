@@ -145,6 +145,9 @@ All notable changes made while turning the original Windows-only Milk Bar Launch
 
 ### Diagnostics and stability work
 
+- Started native-client logging at preload time instead of after HLE hook installation, ensuring bootstrap failures always produce `LatestLog.txt`.
+- Added explicit bootstrap diagnostics for Cemu memory-export resolution, emulated-memory initialization, HLE readiness, hook installation, hook acknowledgement, and launcher IPC connection.
+- Added Linux packaging validation for all four required Cemu dynamic exports and made launcher IPC timeouts report the last native-client bootstrap status.
 - Added detailed `LatestLog.txt` output for server connection, player assignment, actor hooks, memory-scan stages, notification delivery, and compatibility fallbacks.
 - Diagnosed and fixed the infinite native scan that consumed several CPU cores without reaching scan completion.
 - Diagnosed the post-scan `signal 6` as an intentional uncaught exception caused by unavailable legacy flags, then removed that fatal path.

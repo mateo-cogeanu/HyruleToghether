@@ -617,7 +617,18 @@ def command_launch(_: argparse.Namespace) -> int:
         return process.wait()
     except (TimeoutError, RuntimeError, OSError) as error:
         process.terminate()
-        print(f"ERROR: {error}", file=sys.stderr)
+        if isinstance(error, TimeoutError):
+            print("ERROR: Native client did not connect to the launcher within 120 seconds.", file=sys.stderr)
+            latest_log = data_directory() / "LatestLog.txt"
+            if latest_log.is_file():
+                try:
+                    lines = latest_log.read_text(encoding="utf-8", errors="replace").splitlines()
+                    if lines:
+                        print(f"Last native-client status: {lines[-1]}", file=sys.stderr)
+                except OSError:
+                    pass
+        else:
+            print(f"ERROR: {error}", file=sys.stderr)
         return 1
     finally:
         clear_cemu_session(process.pid)

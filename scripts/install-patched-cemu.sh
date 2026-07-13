@@ -108,6 +108,13 @@ if [[ "$host_os" == "Darwin" ]]; then
 else
   executable="$(find "$source_root/bin" -maxdepth 1 -type f -name 'Cemu_*' -perm -111 -print -quit)"
   [[ -n "$executable" ]] || { echo "Cemu executable was not produced." >&2; exit 1; }
+  dynamic_symbols="$(nm -D --defined-only "$executable")"
+  for symbol in memory_getBase osLib_registerHLEFunction milkbar_isHLEReady milkbar_markHooksReady; do
+    if ! grep -Eq "[[:space:]]${symbol}$" <<<"$dynamic_symbols"; then
+      echo "Patched Cemu is missing required exported symbol: $symbol" >&2
+      exit 1
+    fi
+  done
   cp "$executable" "$install_root/Cemu"
   cp -R "$source_root/bin/gameProfiles" "$source_root/bin/resources" "$install_root/"
   executable="$install_root/Cemu"

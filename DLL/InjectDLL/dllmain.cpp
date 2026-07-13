@@ -189,34 +189,74 @@ BOOL APIENTRY DllMain( HMODULE hModule,
 __attribute__((constructor)) static void MilkBarAttach()
 {
     CreateThread(nullptr, 0, [](LPVOID) -> DWORD {
-        for (int attempt = 0; attempt < 1200 && Memory::getBaseAddress() == 0; ++attempt)
+        // Start logging before resolving Cemu hooks. Previously a bootstrap
+        // failure produced no LatestLog.txt and the launcher eventually
+        // terminated an otherwise healthy Cemu after its IPC timeout.
+        Logging::LoggerService::StartLoggerService();
+        Logging::LoggerService::LogInformation("Native client bootstrap started", __FUNCTION__);
+
+        auto memoryGetBase = reinterpret_cast<Memory::memory_getBaseType>(
+            GetProcAddress(GetModuleHandleA("Cemu.exe"), "memory_getBase"));
+        if (!memoryGetBase) {
+            Logging::LoggerService::LogError("Cemu export memory_getBase is unavailable", __FUNCTION__);
+            std::fprintf(stderr, "Milk Bar: Cemu export memory_getBase is unavailable\n");
+            return 1;
+        }
+        Logging::LoggerService::LogInformation("Resolved Cemu memory export", __FUNCTION__);
+        for (int attempt = 0; attempt < 1200 && Main::baseAddr == 0; ++attempt) {
+            Main::baseAddr = reinterpret_cast<uint64_t>(memoryGetBase());
             Sleep(100);
-        Main::baseAddr = Memory::getBaseAddress();
+        }
         if (Main::baseAddr == 0) {
+            Logging::LoggerService::LogError("Cemu did not initialize emulated memory", __FUNCTION__);
             std::fprintf(stderr, "Milk Bar: Cemu did not initialize emulated memory\n");
             return 1;
         }
+        Logging::LoggerService::LogInformation("Resolved Cemu emulated-memory base", __FUNCTION__);
         using MilkBarHLEReadyType = bool (*)();
         auto milkbarHLEReady = reinterpret_cast<MilkBarHLEReadyType>(
             GetProcAddress(GetModuleHandleA("Cemu.exe"), "milkbar_isHLEReady"));
-        for (int attempt = 0; attempt < 1200 && (!milkbarHLEReady || !milkbarHLEReady()); ++attempt) {
-            Sleep(100);
-            if (!milkbarHLEReady)
-                milkbarHLEReady = reinterpret_cast<MilkBarHLEReadyType>(
-                    GetProcAddress(GetModuleHandleA("Cemu.exe"), "milkbar_isHLEReady"));
+        if (!milkbarHLEReady) {
+            Logging::LoggerService::LogError("Cemu export milkbar_isHLEReady is unavailable", __FUNCTION__);
+            std::fprintf(stderr, "Milk Bar: Cemu export milkbar_isHLEReady is unavailable\n");
+            return 1;
         }
-        if (!milkbarHLEReady || !milkbarHLEReady()) {
+        Logging::LoggerService::LogInformation("Resolved Cemu HLE-readiness export", __FUNCTION__);
+        for (int attempt = 0; attempt < 1200 && !milkbarHLEReady(); ++attempt) {
+            Sleep(100);
+        }
+        if (!milkbarHLEReady()) {
+            Logging::LoggerService::LogError("Cemu did not finish HLE initialization", __FUNCTION__);
             std::fprintf(stderr, "Milk Bar: Cemu did not finish HLE initialization\n");
             return 1;
         }
-        Main::SetupAssemblyPatches();
+        Logging::LoggerService::LogInformation("Cemu HLE initialization is ready", __FUNCTION__);
+        try {
+            Main::SetupAssemblyPatches();
+        } catch (const std::exception& exception) {
+            Logging::LoggerService::LogError(
+                std::string("HLE hook installation failed: ") + exception.what(), __FUNCTION__);
+            std::fprintf(stderr, "Milk Bar: HLE hook installation failed: %s\n", exception.what());
+            return 1;
+        } catch (...) {
+            Logging::LoggerService::LogError("HLE hook installation failed with an unknown exception", __FUNCTION__);
+            std::fprintf(stderr, "Milk Bar: HLE hook installation failed\n");
+            return 1;
+        }
+        Logging::LoggerService::LogInformation("Installed native multiplayer HLE hooks", __FUNCTION__);
         using MilkBarHooksReadyType = void (*)();
-        if (auto milkbarHooksReady = reinterpret_cast<MilkBarHooksReadyType>(
-                GetProcAddress(GetModuleHandleA("Cemu.exe"), "milkbar_markHooksReady")))
-            milkbarHooksReady();
-        Logging::LoggerService::StartLoggerService();
+        auto milkbarHooksReady = reinterpret_cast<MilkBarHooksReadyType>(
+            GetProcAddress(GetModuleHandleA("Cemu.exe"), "milkbar_markHooksReady"));
+        if (!milkbarHooksReady) {
+            Logging::LoggerService::LogError("Cemu export milkbar_markHooksReady is unavailable", __FUNCTION__);
+            std::fprintf(stderr, "Milk Bar: Cemu export milkbar_markHooksReady is unavailable\n");
+            return 1;
+        }
+        milkbarHooksReady();
+        Logging::LoggerService::LogInformation("Connecting to launcher IPC", __FUNCTION__);
         try {
             namedPipe->createServer();
+            Logging::LoggerService::LogInformation("Connected to launcher IPC", __FUNCTION__);
             readInstruction();
         } catch (const std::exception& exception) {
             Logging::LoggerService::LogError(exception.what(), __FUNCTION__);
