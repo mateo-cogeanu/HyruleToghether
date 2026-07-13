@@ -25,6 +25,7 @@ namespace Main
 	float GetDistance(int playerNumber, bool includeZAxis);
 	void QueueBomb(std::string bombType, float Position[3]);
 	void Setup();
+	void PrepareGameInstance();
 	DWORD __stdcall ShowConnectionMessage(LPVOID);
 	void SetupAssemblyPatches();
 	bool ExternIsPaused();

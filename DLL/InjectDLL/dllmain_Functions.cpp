@@ -17,6 +17,12 @@ uint64_t notPaused;
 bool isCharacterSpawn = false;
 std::vector<bool> WeaponChanged = { false, false, false, false };
 
+void Main::PrepareGameInstance()
+{
+    if (!Game::GameInstance)
+        Game::GameInstance = new MemoryAccess::LocalInstance();
+}
+
 bool Main::connectToServer(std::string serverMessage)
 {
     int startingPosition = 0;
@@ -1932,7 +1938,11 @@ void Main::Setup()
 
     /* Local instance startup */
 
-    Game::GameInstance = new MemoryAccess::LocalInstance();
+    // Native Cemu creates this before releasing its startup HLE hooks so the
+    // first TimeMgr and actor callbacks are safe. Preserve the early instance:
+    // it may already contain Link and world-time addresses discovered during
+    // title startup.
+    Main::PrepareGameInstance();
 
     Game::GameInstance->playerNumber = playerNumber;
 

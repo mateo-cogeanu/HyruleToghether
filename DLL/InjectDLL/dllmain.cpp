@@ -244,6 +244,11 @@ __attribute__((constructor)) static void MilkBarAttach()
             return 1;
         }
         Logging::LoggerService::LogInformation("Installed native multiplayer HLE hooks", __FUNCTION__);
+        // Cemu resumes title startup as soon as the hook-ready flag is set.
+        // Create the local instance first so early TimeMgr/actor callbacks do
+        // not race the launcher IPC handshake and dereference a null instance.
+        Main::PrepareGameInstance();
+        Logging::LoggerService::LogInformation("Prepared local game instance for startup callbacks", __FUNCTION__);
         using MilkBarHooksReadyType = void (*)();
         auto milkbarHooksReady = reinterpret_cast<MilkBarHooksReadyType>(
             GetProcAddress(GetModuleHandleA("Cemu.exe"), "milkbar_markHooksReady"));

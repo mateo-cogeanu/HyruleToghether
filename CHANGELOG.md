@@ -145,6 +145,7 @@ All notable changes made while turning the original Windows-only Milk Bar Launch
 
 ### Diagnostics and stability work
 
+- Fixed a native startup race exposed by fast macOS title loading: the Time Manager HLE callback could run before launcher IPC created `Game::GameInstance`, causing a native null dereference reported at the DynamicBranch PPC return address `0x01808994`. The local instance is now created before Cemu resumes title startup, preserved through multiplayer setup, and all world/actor/bomb callbacks defensively ignore events until their state exists.
 - Started native-client logging at preload time instead of after HLE hook installation, ensuring bootstrap failures always produce `LatestLog.txt`.
 - Added explicit bootstrap diagnostics for Cemu memory-export resolution, emulated-memory initialization, HLE readiness, hook installation, hook acknowledgement, and launcher IPC connection.
 - Added Linux packaging validation for all four required Cemu dynamic exports and made launcher IPC timeouts report the last native-client bootstrap status.

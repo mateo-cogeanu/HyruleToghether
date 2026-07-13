@@ -325,6 +325,8 @@ Weather newWeather = (Weather)0;
 void WeatherFn(PPCInterpreter_t* hCPU) {
 
 	hCPU->instructionPointer = hCPU->sprNew.LR;
+	if (!Game::GameInstance || !Game::GameInstance->World)
+		return;
 
 	Game::GameInstance->World->LocalWeather = (int)(Weather)hCPU->gpr[26];
 	newWeather = (Weather)Game::GameInstance->World->Weather;
@@ -346,6 +348,8 @@ bool started = false;
 void OnActorCreate(PPCInterpreter_t* hCPU)
 {
 	hCPU->instructionPointer = hCPU->sprNew.LR;
+	if (!Game::GameInstance)
+		return;
 
 	std::string name = Memory::read_string(Main::baseAddr + hCPU->gpr[3] + 0x10, 100, __FUNCTION__);
 	static std::atomic<int> actorHookSamples{0};
@@ -456,6 +460,8 @@ void OnActorErase(PPCInterpreter_t* hCPU)
 {
 
 	hCPU->instructionPointer = hCPU->sprNew.LR;
+	if (!Game::GameInstance)
+		return;
 
 	std::string name = Memory::read_string(Main::baseAddr + hCPU->gpr[3] + 0x10, 100, __FUNCTION__);
 
@@ -590,6 +596,8 @@ void OnActorErase(PPCInterpreter_t* hCPU)
 void remoteBomb_onAICalc(PPCInterpreter_t* hCPU)
 {
 	hCPU->instructionPointer = hCPU->sprNew.LR;
+	if (!Game::GameInstance)
+		return;
 
 	unsigned int aiPtr = hCPU->gpr[3];
 	unsigned int actPtr;
@@ -743,6 +751,8 @@ void remoteBomb_onAICalc2(PPCInterpreter_t* hCPU)
 void timemgr_OnInit(PPCInterpreter_t* hCPU)
 {
 	hCPU->instructionPointer = hCPU->sprNew.LR;
+	if (!Game::GameInstance || !Game::GameInstance->World)
+		return;
 
 	Game::GameInstance->World->ReadableTime = new BigEndian<float>(hCPU->gpr[3] + 0x98 + Main::baseAddr, __FUNCTION__);
 	Game::GameInstance->World->WritableTime = new BigEndian<float>(hCPU->gpr[3] + 0xA0 + Main::baseAddr, __FUNCTION__);
