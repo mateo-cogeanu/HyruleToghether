@@ -71,7 +71,7 @@
 		int ringPtr;
 
 		int fnAddr;
-		int ownerStack;
+		int ownerToken;
 
 		// patch_SpawnActors.asm aligns the following .int fields to four
 		// bytes after its two one-byte flags.  Because this native structure
@@ -88,13 +88,13 @@
 	};
 #pragma pack(pop)
 
-// The PPC assembler aligns SpawnOwnerStack to four bytes after Enabled and
+// The PPC assembler aligns SpawnOwnerToken to four bytes after Enabled and
 // InterceptRegisters. With that owner token the graphic-pack storage is 48
 // bytes. memory_writeMemoryBE() reverses this complete structure, so the
 // native representation must retain the corresponding two padding bytes.
 static_assert(sizeof(TransferableData) == 48, "Spawn transfer layout must match patch_SpawnActors.asm");
 static_assert(offsetof(TransferableData, fnAddr) == 36, "Spawn function address offset changed");
-static_assert(offsetof(TransferableData, ownerStack) == 40, "Spawn owner offset changed");
+static_assert(offsetof(TransferableData, ownerToken) == 40, "Spawn owner offset changed");
 static_assert(offsetof(TransferableData, bytepadding) == 44, "Spawn alignment padding changed");
 static_assert(offsetof(TransferableData, interceptRegisters) == 46, "Spawn intercept flag offset changed");
 static_assert(offsetof(TransferableData, enabled) == 47, "Spawn enabled flag offset changed");
@@ -260,9 +260,15 @@ void setupActor(PPCInterpreter_t* hCPU, TransferableData& trnsData, InstanceData
 	hCPU->gpr[9] = 1;
 	hCPU->gpr[10] = 0;
 	trnsData.fnAddr = 0x037b6040; // Address to call to
-	// CallFunction can run concurrently on all three emulated PPC cores. Only
-	// this invocation owns the parameter registers prepared above.
-	trnsData.ownerStack = hCPU->gpr[1];
+	// CallFunction can run concurrently on all three emulated PPC cores. Carry
+	// an explicit request token in r12 rather than comparing r1: Cemu's HLE
+	// trampoline may expose a temporary stack pointer to the native callback.
+	// The PPC wrapper already saves/restores r12 around this call.
+	static std::atomic<uint32_t> nextSpawnOwner{1};
+	const uint32_t sequence = nextSpawnOwner.fetch_add(1, std::memory_order_relaxed);
+	const uint32_t ownerToken = 0x4D420000u | (sequence & 0xFFFFu);
+	trnsData.ownerToken = static_cast<int>(ownerToken);
+	hCPU->gpr[12] = ownerToken;
 
 	trnsData.enabled = true; // This tells the assembly patch to trigger one function call
 	Logging::LoggerService::LogDebug("Submitted actor " + qAct.Name + " to BOTW's spawn function.", __FUNCTION__);
