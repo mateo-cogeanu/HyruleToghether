@@ -146,6 +146,7 @@ All notable changes made while turning the original Windows-only Milk Bar Launch
 
 ### Diagnostics and stability work
 
+- Fixed Linux remote-player creation stalling between the multiplayer thread and the HLE actor hook. Validated player creates now enter the shared spawn queue directly instead of relying on a second helper-thread transfer, and diagnostics distinguish actor queueing, submission to BOTW's spawn function, and final actor creation.
 - Fixed asymmetric cross-platform visibility when the server host occupied player slot 0. Remote actor slots are now compacted around the local server ID, so a two-player session consistently uses `Jugador1` on both clients instead of incorrectly requesting `Jugador2` on the first client; the corrected mapping is shared by names, models, close/far updates, prop-hunt state, and disconnect tracking.
 - Fixed a Linux-only Cemu Vulkan `SIGTRAP` during BOTW startup. Cemu's continued-draw path incorrectly required a vertex descriptor even though its first-draw path supports pixel-only and descriptor-free pipelines; the bundled Linux patch now restores each active descriptor independently without altering the macOS renderer path.
 - Fixed the first real cross-device remote spawn crash after pause detection was restored. Some newly created remote actors do not yet expose the legacy animation-state pointer chain (it resolved to `0x10`); animation setup is now optional instead of passing that sentinel through the fatal memory validator, allowing position/model synchronization to continue.

@@ -166,10 +166,12 @@ namespace MemoryAccess
 			if (pos.x() == 0 && pos.y() == 0 && pos.z() == 0)
 				pos = Position->get(__FUNCTION__);
 
-			//float SpawnPos[3] = { pos.x(), pos.y(), pos.z() };
-
-			//queuePlayer(playerNumber, SpawnPos);
-			PlayerQueue.insert(PlayerQueue.begin(), {playerNumber, pos});
+			// The old path deferred this through PlayerQueue and depended on the
+			// helper thread to transfer it later. On Linux that transfer could be
+			// missed while the HLE callback itself remained healthy. Queue the
+			// validated request directly while holding the shared spawn mutex.
+			float SpawnPos[3] = { pos.x(), pos.y(), pos.z() };
+			queuePlayer(playerNumber, SpawnPos);
 
 			queue_mutex->unlock();
 

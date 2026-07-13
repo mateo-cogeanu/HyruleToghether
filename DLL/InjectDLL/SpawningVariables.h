@@ -146,6 +146,7 @@ void queueActor(int playerNumber, float Position[3])
 	queueActor.PosZ = Position[2];
 
 	queuedActors.push_back(queueActor);
+	Logging::LoggerService::LogDebug("Queued actor " + actorName + " for the HLE spawn hook.", __FUNCTION__);
 }
 
 void queueActor(std::string actorName, float Position[3])
@@ -245,6 +246,7 @@ void setupActor(PPCInterpreter_t* hCPU, TransferableData& trnsData, InstanceData
 	trnsData.fnAddr = 0x037b6040; // Address to call to
 
 	trnsData.enabled = true; // This tells the assembly patch to trigger one function call
+	Logging::LoggerService::LogDebug("Submitted actor " + qAct.Name + " to BOTW's spawn function.", __FUNCTION__);
 
 	trnsData.interceptRegisters = false; // We don't want to intercept *this* function call
 
