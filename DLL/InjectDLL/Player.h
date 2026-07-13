@@ -81,10 +81,19 @@ namespace MemoryAccess
 		{
 			Mutex.lock();
 			Actor::setAddress(addr);
-			if (addr != 0)
-				AnimationState = new BigEndian<int>(addr, { 0x448, 0x4C, 0x10, 0x19C, 0x38, 0xA0, 0x10, -0x5C }, 0x10, "Player::setAddress::Animation");
-			else
-				AnimationState = new BigEndian<int>();
+			delete AnimationState;
+			AnimationState = nullptr;
+			if (this->baseAddr != 0)
+			{
+				const uint64_t animationAddress = Memory::ReadPointers(
+					this->baseAddr, { 0x448, 0x4C, 0x10, 0x19C, 0x38, 0xA0, 0x10, -0x5C }, true) + 0x10;
+				if (animationAddress >= 30000)
+					AnimationState = new BigEndian<int>(animationAddress, "Player::setAddress::Animation");
+				else
+					Logging::LoggerService::LogWarning(
+						"Remote animation state is not ready; continuing with position synchronization.",
+						"Player::setAddress::Animation");
+			}
 			Mutex.unlock();
 		}
 
