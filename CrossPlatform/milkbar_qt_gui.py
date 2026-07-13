@@ -36,6 +36,17 @@ BACKGROUNDS = WPF / "Backgrounds"
 APP_ICON = next((path for path in (ROOT / "icon.png", Path(__file__).with_name("icon.png")) if path.exists()), None)
 WIDTH, HEIGHT = 1188, 639
 BOTW_TITLE_SUFFIXES = {"101c9300", "101c9400", "101c9500"}  # Japan, USA, Europe
+BACKEND_LAUNCH_ARGUMENT = "--hyt-backend-launch"
+
+
+def backend_launch_command() -> tuple[str, list[str]]:
+    """Return a launch worker command for source and packaged applications."""
+    if getattr(sys, "frozen", False):
+        # A frozen sys.executable is the launcher, not a Python interpreter.
+        # Re-enter through the private worker argument so Play starts Cemu
+        # instead of opening a second launcher window.
+        return sys.executable, [BACKEND_LAUNCH_ARGUMENT]
+    return sys.executable, [str(Path(__file__).with_name("milkbar_launcher.py")), "launch"]
 
 
 def installed_title_id(meta_path: Path, kind: str) -> str:
@@ -896,8 +907,9 @@ class MilkBarWindow(QMainWindow):
         self.loading.show()
         self.launch_log = []
         self.process = QProcess(self)
-        self.process.setProgram(sys.executable)
-        self.process.setArguments([str(Path(__file__).with_name("milkbar_launcher.py")), "launch"])
+        program, arguments = backend_launch_command()
+        self.process.setProgram(program)
+        self.process.setArguments(arguments)
         self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
         self.process.readyReadStandardOutput.connect(self.launch_output)
         self.process.finished.connect(self.launch_finished)
@@ -929,6 +941,8 @@ class MilkBarWindow(QMainWindow):
 
 
 def main() -> int:
+    if sys.argv[1:] == [BACKEND_LAUNCH_ARGUMENT]:
+        return backend.command_launch(None)
     if sys.platform not in ("darwin", "linux"):
         print("The native Hyrule Together GUI supports macOS and Linux.", file=sys.stderr)
         return 1
