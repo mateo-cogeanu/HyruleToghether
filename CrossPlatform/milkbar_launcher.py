@@ -109,6 +109,36 @@ def cemu_process_environment(cemu: Path | str) -> dict[str, str]:
     return environment
 
 
+def preloadable_client_library(library: Path) -> Path:
+    """Stage Linux's preload library at a path the ELF loader can parse."""
+    if sys.platform != "linux" or not any(character.isspace() or character == ":" for character in str(library)):
+        return library
+
+    # ld.so tokenizes LD_PRELOAD on spaces as well as colons and provides no
+    # quoting syntax. A branded bundle directory such as "Hyrule Together"
+    # therefore cannot be referenced directly. Cache this exact client build
+    # under a private, delimiter-free path and preload that copy.
+    cache_directory = data_directory() / "native-client"
+    if any(character.isspace() or character == ":" for character in str(cache_directory)):
+        cache_directory = Path("/tmp") / f"hyrule-together-{os.getuid()}" / "native-client"
+    cache_directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    cache_directory.chmod(0o700)
+
+    digest = hashlib.sha256()
+    with library.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    destination = cache_directory / f"libMilkBarClient-{digest.hexdigest()[:16]}.so"
+    if not destination.is_file():
+        temporary = cache_directory / f".{destination.name}.{os.getpid()}.tmp"
+        shutil.copy2(library, temporary)
+        os.replace(temporary, destination)
+    for old_library in cache_directory.glob("libMilkBarClient-*.so"):
+        if old_library != destination:
+            old_library.unlink(missing_ok=True)
+    return destination
+
+
 def bundled_runtime_root() -> Path | None:
     executable = Path(sys.executable).resolve()
     candidates = [
@@ -550,7 +580,12 @@ def command_launch(_: argparse.Namespace) -> int:
             return 1
 
     cemu = normalize_cemu(str(config["cemu"]))
-    library = Path(str(config["client_library"])).expanduser().resolve()
+    try:
+        library = preloadable_client_library(
+            Path(str(config["client_library"])).expanduser().resolve())
+    except OSError as error:
+        print(f"ERROR: Could not stage the native client for Linux: {error}", file=sys.stderr)
+        return 1
     ipc_path = data_directory() / "milkbar.sock"
     ipc_path.parent.mkdir(parents=True, exist_ok=True)
     ipc_path.unlink(missing_ok=True)

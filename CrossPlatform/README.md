@@ -111,6 +111,10 @@ The runtime also records whether Wayland support was compiled. X11-only Cemu
 builds automatically select XWayland even when the launcher itself is running
 in a native Wayland session.
 
+Linux's dynamic loader cannot parse spaces inside an `LD_PRELOAD` entry. The
+launcher therefore stages its native client in a private no-space cache before
+starting Cemu, while retaining the user-facing **Hyrule Together** package name.
+
 The Lobby Browser's **Host Server** action configures and starts the dedicated
 server in an interactive system terminal, adds its loopback address to the
 server list, and shuts the server down with the launcher. The terminal shows
