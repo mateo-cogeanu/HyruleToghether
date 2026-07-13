@@ -15,6 +15,7 @@ os_common_source="$source_root/src/Cafe/OS/common/OSCommon.cpp"
 dynload_source="$source_root/src/Cafe/OS/libs/coreinit/coreinit_DynLoad.cpp"
 msl_header="$source_root/src/Cafe/HW/Latte/LegacyShaderDecompiler/LatteDecompilerEmitMSLHeader.hpp"
 rpl_source="$source_root/src/Cafe/OS/RPL/rpl.cpp"
+vulkan_renderer_source="$source_root/src/Cafe/HW/Latte/Renderer/Vulkan/VulkanRendererCore.cpp"
 launch_header="$source_root/src/config/LaunchSettings.h"
 launch_source="$source_root/src/config/LaunchSettings.cpp"
 
@@ -23,7 +24,7 @@ if [[ ! -f "$header" || ! -f "$cmake_file" ]]; then
   exit 1
 fi
 
-python3 - "$header" "$cmake_file" "$app_source" "$os_common_header" "$os_common_source" "$dynload_source" "$launch_header" "$launch_source" "$msl_header" "$rpl_source" <<'PY'
+python3 - "$header" "$cmake_file" "$app_source" "$os_common_header" "$os_common_source" "$dynload_source" "$launch_header" "$launch_source" "$msl_header" "$rpl_source" "$vulkan_renderer_source" <<'PY'
 from pathlib import Path
 import sys
 
@@ -37,6 +38,7 @@ launch_header = Path(sys.argv[7])
 launch_source = Path(sys.argv[8])
 msl_header = Path(sys.argv[9])
 rpl_source = Path(sys.argv[10])
+vulkan_renderer_source = Path(sys.argv[11])
 text = header.read_text()
 old = """    #if BOOST_OS_WINDOWS
         #define DLLEXPORT __attribute__((dllexport))
@@ -323,6 +325,46 @@ if old_reject in rpl:
     rpl_source.write_text(rpl.replace(old_reject, new_reject))
 elif new_reject not in rpl:
     raise SystemExit("Cemu's module handle lookup changed; update scripts/patch-cemu.sh")
+
+# Cemu's first Vulkan draw explicitly permits vertex-only, pixel-only, and
+# descriptor-free pipelines. Its continued-draw path instead assumes that a
+# vertex descriptor always exists and raises SIGTRAP when it does not. RADV can
+# legitimately reach the pixel-only case during BOTW startup. Keep this fix
+# Linux-only so the macOS Metal/Vulkan paths remain byte-for-byte unchanged.
+vulkan_renderer = vulkan_renderer_source.read_text()
+old_descriptor_restore = '''\tVkDescriptorSetInfo *vertexDS = nullptr, *pixelDS = nullptr, *geometryDS = nullptr;
+\tif (m_state.activeVertexDS)
+\t{
+\t\tvertexDS = m_state.activeVertexDS;
+\t\tpixelDS = m_state.activePixelDS;
+\t\tgeometryDS = m_state.activeGeometryDS;
+\t}
+\telse
+\t{
+\t\tcemu_assert(false); // should never happen unless draw_prepareDescriptorSets can fail?
+\t}'''
+new_descriptor_restore = '''\tVkDescriptorSetInfo *vertexDS = nullptr, *pixelDS = nullptr, *geometryDS = nullptr;
+#if BOOST_OS_LINUX
+\t// MILKBAR_LINUX_VULKAN_OPTIONAL_VERTEX_DESCRIPTOR
+\tvertexDS = m_state.activeVertexDS;
+\tpixelDS = m_state.activePixelDS;
+\tgeometryDS = m_state.activeGeometryDS;
+#else
+\tif (m_state.activeVertexDS)
+\t{
+\t\tvertexDS = m_state.activeVertexDS;
+\t\tpixelDS = m_state.activePixelDS;
+\t\tgeometryDS = m_state.activeGeometryDS;
+\t}
+\telse
+\t{
+\t\tcemu_assert(false); // should never happen unless draw_prepareDescriptorSets can fail?
+\t}
+#endif'''
+if old_descriptor_restore in vulkan_renderer:
+    vulkan_renderer_source.write_text(vulkan_renderer.replace(old_descriptor_restore, new_descriptor_restore))
+elif "MILKBAR_LINUX_VULKAN_OPTIONAL_VERTEX_DESCRIPTOR" not in vulkan_renderer:
+    raise SystemExit("Cemu's Vulkan descriptor restore path changed; update scripts/patch-cemu.sh")
 
 dynload = dynload_source.read_text()
 if "milkbar_markHLEReady();" not in dynload:

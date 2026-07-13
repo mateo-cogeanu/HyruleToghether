@@ -146,6 +146,7 @@ All notable changes made while turning the original Windows-only Milk Bar Launch
 
 ### Diagnostics and stability work
 
+- Fixed a Linux-only Cemu Vulkan `SIGTRAP` during BOTW startup. Cemu's continued-draw path incorrectly required a vertex descriptor even though its first-draw path supports pixel-only and descriptor-free pipelines; the bundled Linux patch now restores each active descriptor independently without altering the macOS renderer path.
 - Fixed the first real cross-device remote spawn crash after pause detection was restored. Some newly created remote actors do not yet expose the legacy animation-state pointer chain (it resolved to `0x10`); animation setup is now optional instead of passing that sentinel through the fatal memory validator, allowing position/model synchronization to continue.
 - Fixed misleading post-handshake "crashes": server connection rejections now preserve their protocol reason, log whether the server is full, the password is incorrect, the server is unreachable, or its response is malformed, and return that explanation through launcher IPC instead of reporting a generic native-client failure.
 - Added human-readable rejection reasons to the cross-platform dedicated server handshake while retaining the existing numeric response codes for compatibility with original clients.
