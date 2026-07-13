@@ -2,6 +2,7 @@
 
 #include <shared_mutex>
 #include <atomic>
+#include <mutex>
 #include "KeyCodeActor.h"
 #include "BotwEdit.h"
 #include <map>
@@ -71,7 +72,7 @@
 		int ringPtr;
 
 		int fnAddr;
-		int ownerToken;
+		int dispatchReserved;
 
 		// patch_SpawnActors.asm aligns the following .int fields to four
 		// bytes after its two one-byte flags.  Because this native structure
@@ -88,13 +89,13 @@
 	};
 #pragma pack(pop)
 
-// The PPC assembler aligns SpawnOwnerToken to four bytes after Enabled and
-// InterceptRegisters. With that owner token the graphic-pack storage is 48
+// The PPC assembler aligns SpawnDispatchReserved to four bytes after Enabled
+// and InterceptRegisters. With that reserved transfer word the storage is 48
 // bytes. memory_writeMemoryBE() reverses this complete structure, so the
 // native representation must retain the corresponding two padding bytes.
 static_assert(sizeof(TransferableData) == 48, "Spawn transfer layout must match patch_SpawnActors.asm");
 static_assert(offsetof(TransferableData, fnAddr) == 36, "Spawn function address offset changed");
-static_assert(offsetof(TransferableData, ownerToken) == 40, "Spawn owner offset changed");
+static_assert(offsetof(TransferableData, dispatchReserved) == 40, "Spawn reserved-word offset changed");
 static_assert(offsetof(TransferableData, bytepadding) == 44, "Spawn alignment padding changed");
 static_assert(offsetof(TransferableData, interceptRegisters) == 46, "Spawn intercept flag offset changed");
 static_assert(offsetof(TransferableData, enabled) == 47, "Spawn enabled flag offset changed");
@@ -117,6 +118,7 @@ std::map<char, std::vector<KeyCodeActor>> keyCodeMap;
 std::shared_mutex keycode_mutex;
 std::shared_mutex queue_mutex;
 std::shared_mutex data_mutex;
+std::mutex spawn_callback_mutex;
 
 std::map<char, bool> prevKeyStateMap; // Used for key press logic - keeps track of previous key state
 
@@ -251,24 +253,27 @@ void setupActor(PPCInterpreter_t* hCPU, TransferableData& trnsData, InstanceData
 	// -------------------------------------------------
 
 	// Set registers for params and stuff
+	trnsData.f_r4 = trnsData.ringPtr + sizeof(instData) - sizeof(instData.name);
+	trnsData.f_r6 = mubinLocation;
+	trnsData.f_r7 = actorStorageLocation;
+	trnsData.f_r8 = 0;
+	trnsData.f_r9 = 1;
+	trnsData.f_r10 = 0;
+
+	// Preserve the original callback-register path for Cemu backends that
+	// support it, but also persist every argument in PPC-visible memory. The
+	// graphic-pack wrapper reloads these fields after the HLE callback, which
+	// makes dispatch independent of native register write-back and PPC core.
 	hCPU->gpr[3] = trnsData.f_r3;
-	hCPU->gpr[4] = trnsData.ringPtr + sizeof(instData) - sizeof(instData.name);
+	hCPU->gpr[4] = trnsData.f_r4;
 	hCPU->gpr[5] = trnsData.f_r5;
-	hCPU->gpr[6] = mubinLocation;
-	hCPU->gpr[7] = actorStorageLocation;
-	hCPU->gpr[8] = 0;
-	hCPU->gpr[9] = 1;
-	hCPU->gpr[10] = 0;
+	hCPU->gpr[6] = trnsData.f_r6;
+	hCPU->gpr[7] = trnsData.f_r7;
+	hCPU->gpr[8] = trnsData.f_r8;
+	hCPU->gpr[9] = trnsData.f_r9;
+	hCPU->gpr[10] = trnsData.f_r10;
 	trnsData.fnAddr = 0x037b6040; // Address to call to
-	// CallFunction can run concurrently on all three emulated PPC cores. Carry
-	// an explicit request token in r12 rather than comparing r1: Cemu's HLE
-	// trampoline may expose a temporary stack pointer to the native callback.
-	// The PPC wrapper already saves/restores r12 around this call.
-	static std::atomic<uint32_t> nextSpawnOwner{1};
-	const uint32_t sequence = nextSpawnOwner.fetch_add(1, std::memory_order_relaxed);
-	const uint32_t ownerToken = 0x4D420000u | (sequence & 0xFFFFu);
-	trnsData.ownerToken = static_cast<int>(ownerToken);
-	hCPU->gpr[12] = ownerToken;
+	trnsData.dispatchReserved = 0;
 
 	trnsData.enabled = true; // This tells the assembly patch to trigger one function call
 	Logging::LoggerService::LogDebug("Submitted actor " + qAct.Name + " to BOTW's spawn function.", __FUNCTION__);
@@ -290,6 +295,10 @@ queuedActors.erase(queuedActors.begin());
 
 void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBuffer, uint32_t endRingBuffer, uint64_t baseAddress) {
 	hCPU->instructionPointer = hCPU->sprNew.LR; // Tell it where to return to - REQUIRED
+	// Multiple emulated PPC cores can enter this native HLE callback at once.
+	// Serialize the transfer transaction so a second callback cannot publish an
+	// older snapshot over a newly prepared request.
+	std::lock_guard<std::mutex> callbackLock(spawn_callback_mutex);
 
 	// This is the stuff I'm currently using to test different values for potential Link coords
 	//MemoryInstance::floatBE* pos = reinterpret_cast<MemoryInstance::floatBE*>(memInstance->baseAddr + 0x10263910);
@@ -323,11 +332,13 @@ void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBu
 			return;
 		trnsData.ringPtr = startRingBuffer;
 	}
-	// Do not re-enable register interception while another PPC core owns a
-	// pending synthetic call. Otherwise that call would overwrite the natural
-	// actor-factory template with its own parameters before it can run.
-	if (!trnsData.enabled)
-		trnsData.interceptRegisters = true;
+	// A PPC wrapper has not consumed the previous transaction yet. Leave every
+	// byte untouched; any wrapper may safely dispatch the shared arguments.
+	if (trnsData.enabled)
+		return;
+	// No dispatch is pending, so natural actor-factory calls may refresh the
+	// template registers used to prepare the next synthetic actor.
+	trnsData.interceptRegisters = true;
 
 	queue_mutex.lock(); ////////////////////////////////////////////
 	// Actual actor spawning - just read from queue here.
@@ -340,8 +351,16 @@ void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBu
 	}
 	queue_mutex.unlock(); //========================================
 
+	// Publish a dispatch transaction only after every argument is visible. The
+	// PPC hook checks Enabled first, so writing that byte last is the commit.
+	const bool dispatchReady = trnsData.enabled;
+	trnsData.enabled = false;
 	data_mutex.lock(); ////////////////////////////////////////////////////////////////////
 	memInstance->memory_writeMemoryBE(startTrnsData, trnsData, baseAddress);
+	if (dispatchReady) {
+		const byte enabled = 1;
+		memInstance->memory_writeMemory(startTrnsData, enabled, baseAddress);
+	}
 	data_mutex.unlock(); //==================================================================
 }
 
