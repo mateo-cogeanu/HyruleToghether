@@ -91,6 +91,24 @@ def external_process_environment() -> dict[str, str]:
     return environment
 
 
+def cemu_process_environment(cemu: Path | str) -> dict[str, str]:
+    """Return the clean environment required by this bundled Cemu build."""
+    environment = external_process_environment()
+    if sys.platform != "linux":
+        return environment
+    metadata_path = Path(cemu).expanduser().resolve().parent / "runtime.json"
+    try:
+        display_backend = json.loads(metadata_path.read_text(encoding="utf-8")).get("display_backend")
+    except (OSError, ValueError, AttributeError):
+        display_backend = None
+    if display_backend == "x11":
+        # wxGTK otherwise follows a Wayland desktop session even though this
+        # Cemu binary has no Wayland window-system support. Force its supported
+        # X11 path so Vulkan receives a valid XWayland surface.
+        environment["GDK_BACKEND"] = "x11"
+    return environment
+
+
 def bundled_runtime_root() -> Path | None:
     executable = Path(sys.executable).resolve()
     candidates = [
@@ -542,7 +560,7 @@ def command_launch(_: argparse.Namespace) -> int:
     listener.listen(1)
     listener.settimeout(120)
 
-    environment = external_process_environment()
+    environment = cemu_process_environment(cemu)
     environment["MILKBAR_IPC_PATH"] = str(ipc_path)
     environment["MILKBAR_DATA_DIR"] = str(data_directory())
     environment["MILKBAR_CEMU_DATA_DIR"] = str(prepare_cemu_config())

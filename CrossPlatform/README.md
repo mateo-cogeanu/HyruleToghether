@@ -107,6 +107,9 @@ instead of opening another launcher window.
 Before a frozen Linux launcher starts Cemu, it restores the host's original
 library search path. This keeps PyInstaller's private Qt/X11/GTK libraries out
 of Cemu and prevents them from being mixed with the system Vulkan driver.
+The runtime also records whether Wayland support was compiled. X11-only Cemu
+builds automatically select XWayland even when the launcher itself is running
+in a native Wayland session.
 
 The Lobby Browser's **Host Server** action configures and starts the dedicated
 server in an interactive system terminal, adds its loopback address to the

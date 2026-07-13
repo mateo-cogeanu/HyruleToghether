@@ -4,6 +4,7 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 target="${1:-}"
 source_root="${MILKBAR_CEMU_SOURCE:-$root/.tools/Cemu}"
+display_backend="native"
 
 case "$target" in
   mac_x86_64)
@@ -59,9 +60,11 @@ done
 if [[ "$host_os" == "Linux" ]]; then
   if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists 'wayland-protocols >= 1.15'; then
     platform_flags=(-DENABLE_WAYLAND=ON)
+    display_backend="wayland-x11"
     echo "Cemu Linux backend: Wayland and X11 (wayland-protocols detected)."
   else
     platform_flags=(-DENABLE_WAYLAND=OFF)
+    display_backend="x11"
     echo "Cemu Linux backend: X11/XWayland (wayland-protocols not installed)."
   fi
 fi
@@ -110,6 +113,6 @@ else
   executable="$install_root/Cemu"
 fi
 
-printf '{\n  "target": "%s",\n  "commit": "%s",\n  "executable": "%s"\n}\n' \
-  "$target" "$commit" "$executable" > "$install_root/runtime.json"
+printf '{\n  "target": "%s",\n  "commit": "%s",\n  "executable": "%s",\n  "display_backend": "%s"\n}\n' \
+  "$target" "$commit" "$executable" "$display_backend" > "$install_root/runtime.json"
 echo "Installed patched Cemu: $executable"
