@@ -18,13 +18,14 @@ rpl_source="$source_root/src/Cafe/OS/RPL/rpl.cpp"
 vulkan_renderer_source="$source_root/src/Cafe/HW/Latte/Renderer/Vulkan/VulkanRendererCore.cpp"
 launch_header="$source_root/src/config/LaunchSettings.h"
 launch_source="$source_root/src/config/LaunchSettings.cpp"
+cafe_system_source="$source_root/src/Cafe/CafeSystem.cpp"
 
 if [[ ! -f "$header" || ! -f "$cmake_file" ]]; then
   echo "Not a current cemu-project/Cemu source tree: $source_root" >&2
   exit 1
 fi
 
-python3 - "$header" "$cmake_file" "$app_source" "$os_common_header" "$os_common_source" "$dynload_source" "$launch_header" "$launch_source" "$msl_header" "$rpl_source" "$vulkan_renderer_source" <<'PY'
+python3 - "$header" "$cmake_file" "$app_source" "$os_common_header" "$os_common_source" "$dynload_source" "$launch_header" "$launch_source" "$msl_header" "$rpl_source" "$vulkan_renderer_source" "$cafe_system_source" <<'PY'
 from pathlib import Path
 import sys
 
@@ -39,6 +40,7 @@ launch_source = Path(sys.argv[8])
 msl_header = Path(sys.argv[9])
 rpl_source = Path(sys.argv[10])
 vulkan_renderer_source = Path(sys.argv[11])
+cafe_system_source = Path(sys.argv[12])
 text = header.read_text()
 old = """    #if BOOST_OS_WINDOWS
         #define DLLEXPORT __attribute__((dllexport))
@@ -86,13 +88,15 @@ if(APPLE)
         "-Wl,-exported_symbol,_memory_getBase"
         "-Wl,-exported_symbol,_osLib_registerHLEFunction"
         "-Wl,-exported_symbol,_milkbar_isHLEReady"
-        "-Wl,-exported_symbol,_milkbar_markHooksReady")
+        "-Wl,-exported_symbol,_milkbar_markHooksReady"
+        "-Wl,-exported_symbol,_milkbar_isTitleActive")
 elseif(UNIX)
     target_link_options(CemuBin PRIVATE
         "-Wl,--export-dynamic-symbol=memory_getBase"
         "-Wl,--export-dynamic-symbol=osLib_registerHLEFunction"
         "-Wl,--export-dynamic-symbol=milkbar_isHLEReady"
-        "-Wl,--export-dynamic-symbol=milkbar_markHooksReady")
+        "-Wl,--export-dynamic-symbol=milkbar_markHooksReady"
+        "-Wl,--export-dynamic-symbol=milkbar_isTitleActive")
 endif()
 """
     cmake_file.write_text(cmake + block)
@@ -119,6 +123,56 @@ if "milkbar_markHooksReady" not in cmake:
         '"-Wl,--export-dynamic-symbol=milkbar_isHLEReady"\n'
         '        "-Wl,--export-dynamic-symbol=milkbar_markHooksReady")')
     cmake_file.write_text(cmake)
+cmake = cmake_file.read_text()
+if "milkbar_isTitleActive" not in cmake:
+    cmake = cmake.replace(
+        '"-Wl,-exported_symbol,_milkbar_markHooksReady")',
+        '"-Wl,-exported_symbol,_milkbar_markHooksReady"\n'
+        '        "-Wl,-exported_symbol,_milkbar_isTitleActive")')
+    cmake = cmake.replace(
+        '"-Wl,--export-dynamic-symbol=milkbar_markHooksReady")',
+        '"-Wl,--export-dynamic-symbol=milkbar_markHooksReady"\n'
+        '        "-Wl,--export-dynamic-symbol=milkbar_isTitleActive")')
+    cmake_file.write_text(cmake)
+
+# Cemu's public title-running flag remains true until after emulated memory is
+# destroyed. Publish a separate native-client lifetime signal at the start of
+# shutdown so worker threads can stop before dereferencing unmapped game data.
+cafe_system = cafe_system_source.read_text()
+if "s_milkbarTitleActive" not in cafe_system:
+    cafe_system = cafe_system.replace(
+        "bool sSystemRunning = false;",
+        "bool sSystemRunning = false;\n\tstatic std::atomic_bool s_milkbarTitleActive{false};")
+    cafe_system = cafe_system.replace(
+        "sSystemRunning = true;\n\t\tWindowSystem::NotifyGameLoaded();",
+        "sSystemRunning = true;\n"
+        "\t\ts_milkbarTitleActive.store(true, std::memory_order_release);\n"
+        "\t\tWindowSystem::NotifyGameLoaded();")
+    running_function = """\tbool IsTitleRunning()
+\t{
+\t\treturn sSystemRunning;
+\t}"""
+    active_export = running_function + """
+
+\textern "C" DLLEXPORT bool milkbar_isTitleActive()
+\t{
+\t\treturn s_milkbarTitleActive.load(std::memory_order_acquire);
+\t}"""
+    if running_function not in cafe_system:
+        raise SystemExit("Cemu's title-running function changed; update scripts/patch-cemu.sh")
+    cafe_system = cafe_system.replace(running_function, active_export)
+    shutdown_guard = """\t\tif(!sSystemRunning)
+\t\t\treturn;
+\t\tcoreinit::OSSchedulerEnd();"""
+    shutdown_publish = """\t\tif(!sSystemRunning)
+\t\t\treturn;
+\t\t// MILKBAR_TITLE_LIFETIME
+\t\ts_milkbarTitleActive.store(false, std::memory_order_release);
+\t\tcoreinit::OSSchedulerEnd();"""
+    if shutdown_guard not in cafe_system:
+        raise SystemExit("Cemu's title-shutdown sequence changed; update scripts/patch-cemu.sh")
+    cafe_system = cafe_system.replace(shutdown_guard, shutdown_publish)
+    cafe_system_source.write_text(cafe_system)
 
 # Give the bundled launcher a private writable Cemu configuration directory.
 # This suppresses Cemu's first-run setup without changing another Cemu install.

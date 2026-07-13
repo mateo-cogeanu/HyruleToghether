@@ -48,7 +48,15 @@ staging="$build_root/staging"
 rm -rf "$staging" "$build_root/dist" "$build_root/work"
 mkdir -p "$staging/runtime/cemu" "$staging/runtime/client" "$staging/runtime/server" "$staging/runtime/mod" "$staging/runtime/tools"
 MILKBAR_CEMU_INSTALL_DIR="$staging/runtime/cemu" "$root/scripts/install-patched-cemu.sh" "$target"
-cp "$root/Build/cross-platform/libMilkBarClient.$client_ext" "$staging/runtime/client/"
+client_source="$root/Build/cross-platform/libMilkBarClient.$client_ext"
+client_destination="$staging/runtime/client/libMilkBarClient.$client_ext"
+if [[ "$host_os" == "Darwin" ]]; then
+  # Development builds remain universal so either local Cemu architecture can
+  # preload them, but distributable launchers contain only their named target.
+  lipo "$client_source" -thin "$expected_arch" -output "$client_destination"
+else
+  cp "$client_source" "$client_destination"
+fi
 cp -R "$root/Build/server/$server_rid/." "$staging/runtime/server/"
 rm -rf "$staging/runtime/server/Logs" "$staging/runtime/server/LatestLog.txt"
 cp "$root/BNP Files/MilkBarLauncher.bnp" "$staging/runtime/mod/"

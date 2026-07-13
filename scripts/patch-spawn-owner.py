@@ -53,8 +53,8 @@ def main() -> int:
         "cmpwi r11, 0\n"
         "beq restoreAndExit\n"
         "; Atomically claim the shared request. CallFunction runs on all three\n"
-        "; emulated PPC cores, where the old byte-only flag allowed duplicate dispatch.\n"
-        "; the same actor. State 1 is ready and state 2 has one owner.\n"
+        "; emulated PPC cores, where the old byte-only flag allowed duplicate dispatch\n"
+        "; of the same actor. State 1 is ready and state 2 has one owner.\n"
         "lis r12, SpawnDispatchState@ha\n"
         "addi r12, r12, SpawnDispatchState@l\n"
         "claimSpawnRequest:\n"
@@ -173,9 +173,12 @@ def main() -> int:
     )
     text = replace_once(
         text,
+        "; Set up if statment\n"
+        "lis r11, Enabled@ha\n"
+        "lbz r11, Enabled@l(r11)\n"
+        "cmpwi r11, 0x0\n"
         "beq restoreAndExit ; We can skip over applying params if we're not calling the func, so putting this here is fine.\n\n"
         "; Set up where to jump to...",
-        "beq restoreAndExit ; We can skip over applying params if we're not calling the func, so putting this here is fine.\n\n"
         f"{atomic_claim}\n{argument_loads}\n"
         "; Set up where to jump to...",
         "spawn request consumer",

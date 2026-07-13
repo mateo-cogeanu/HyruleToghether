@@ -22,6 +22,7 @@ All notable changes made while turning the original Windows-only Milk Bar Launch
 - Bundled the matching patched Cemu runtime, native multiplayer client, dedicated server, mod archive, UKMM merger, model builder, graphical assets, and Python/Qt runtime.
 - Added a direct macOS application-bundle fallback for environments where PyInstaller is unavailable.
 - Added target/host validation so incompatible packages cannot accidentally be built on the wrong operating system or CPU architecture.
+- Kept universal macOS native clients available for local development while thinning the client inside each signed launcher bundle to that bundle's single `arm64` or `x86_64` target.
 - Added code signing of development macOS bundles and ZIP packaging through `ditto`.
 - Added native component build scripts for the client, server, model builder, UKMM tool, and patched Cemu.
 - Added setup and launcher scripts for development use.
@@ -58,6 +59,7 @@ All notable changes made while turning the original Windows-only Milk Bar Launch
 
 - Updated the port for current native Cemu rather than relying on the old Windows injection model.
 - Added a reproducible Cemu patching flow.
+- Added an exported title-lifetime signal that becomes inactive at the beginning of Cemu teardown, before emulated memory is invalidated.
 - Fixed the reproducible Cemu patcher to resolve the Metal shader implementation relative to its supplied header path, allowing clean one-command bundles to apply the sampler patch successfully.
 - Added Pillow as an explicit packaging dependency so PyInstaller can convert the launcher PNG icon to the native macOS ICNS format during clean builds.
 - Exported `memory_getBase` and the HLE registration entry points required by the native client.
@@ -99,7 +101,7 @@ All notable changes made while turning the original Windows-only Milk Bar Launch
 ### Multiplayer startup and resilience
 
 - Made remote-player actor spawning a single-consumer PPC transaction. The three emulated cores now atomically claim each queued spawn, and the request remains blocked until the winning actor-factory call returns, preventing Linux from racing duplicate calls and silently failing to create the other player.
-
+- Added narrowly scoped spawn-transaction diagnostics that log the exact shared actor-factory argument block and distinguish PPC-visible requests, successful atomic claims, actor-factory returns, and final actor creation. Added a release fence before the ready byte is published so ARM hosts cannot expose the flag before the shared arguments and claim state.
 - Replaced the broken macOS/Linux `notPaused` game-data polling dependency with a heartbeat from the native per-frame actor hook. UKMM retained the legacy flag but did not refresh it, causing both connected clients to remain permanently "paused" and reject every remote-player creation request; normal gameplay can now spawn remote actors while menus and loading states remain guarded.
 - Added the in-game quest-log notification `Server sync started!` after Link is discovered and the synchronization scan begins.
 - Added explicit logging when the notification is written successfully.
@@ -148,8 +150,9 @@ All notable changes made while turning the original Windows-only Milk Bar Launch
 
 ### Diagnostics and stability work
 
+- Fixed the separate `mainServerLoop` title-shutdown crash reported while Cemu logged `Game: Not running`. Cemu now marks title memory inactive before scheduler and memory teardown, and the multiplayer server, helper, pause, and quest workers stop before further game-memory access; the network connection is closed without calling the legacy fatal disconnect path or terminating Cemu.
 - Fixed one-way remote-player visibility on Linux by making actor-spawn submission independent of HLE register write-back and emulated-core ownership. The original PPC hook stored one global request flag while its prepared argument registers remained local to the callback's emulated core; Linux's multicore recompiler could therefore let a different core consume the request with unrelated registers. Stack-pointer and saved-register ownership attempts both proved backend-dependent: fresh Linux logs reached `Submitted actor` indefinitely but never reached `Spawned player`. The native callback now persists all eight actor-factory arguments in PPC-visible transfer memory, and the PPC wrapper explicitly reloads them after the callback before consuming the request. Submission is transactional across concurrent callbacks: the argument block is written first, the ready byte is published last, and a pending request cannot be overwritten by another queued actor. Bundled patch contents remain part of the installed-mod signature so launcher updates automatically redeploy changed PPC patches.
-- Fixed a Linux `SIGSEGV` introduced while diagnosing remote actor creation. The original `patch_SpawnActors.asm` transfer block was 44 bytes including two implicit alignment bytes—not 42 bytes—and is deliberately kept at the corrected 48-byte ABI with a reserved transfer word. The matching reversed native padding is retained, exact size/offset assertions document and enforce the PPC ABI, invalid ring-buffer addresses are rejected before dereferencing, and instance storage is read only when an actor is actually queued. Scoped packing still prevents this ABI alignment from leaking into unrelated native types.
+- Fixed a Linux `SIGSEGV` introduced while diagnosing remote actor creation. The original `patch_SpawnActors.asm` transfer block was 44 bytes including two implicit alignment bytes—not 42 bytes—and is deliberately kept at the corrected 48-byte ABI with an atomic dispatch-state word. The matching reversed native padding is retained, exact size/offset assertions document and enforce the PPC ABI, invalid ring-buffer addresses are rejected before dereferencing, and instance storage is read only when an actor is actually queued. Scoped packing still prevents this ABI alignment from leaking into unrelated native types.
 - Reverted the experimental direct actor-queue path after cross-device testing showed lost visibility and macOS graphics instability. The original deferred path is restored, with passive diagnostics distinguishing helper-thread transfer, HLE queueing, submission to BOTW's spawn function, and final actor creation.
 - Fixed asymmetric cross-platform visibility when the server host occupied player slot 0. Remote actor slots are now compacted around the local server ID, so a two-player session consistently uses `Jugador1` on both clients instead of incorrectly requesting `Jugador2` on the first client; the corrected mapping is shared by names, models, close/far updates, prop-hunt state, and disconnect tracking.
 - Fixed a Linux-only Cemu Vulkan `SIGTRAP` during BOTW startup. Cemu's continued-draw path incorrectly required a vertex descriptor even though its first-draw path supports pixel-only and descriptor-free pipelines; the bundled Linux patch now restores each active descriptor independently without altering the macOS renderer path.

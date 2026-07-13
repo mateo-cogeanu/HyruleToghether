@@ -120,6 +120,11 @@ std::shared_mutex queue_mutex;
 std::shared_mutex data_mutex;
 std::mutex spawn_callback_mutex;
 
+uint64_t spawn_request_sequence = 0;
+uint64_t pending_spawn_sequence = 0;
+int last_observed_dispatch_state = -1;
+std::string pending_spawn_name;
+
 std::map<char, bool> prevKeyStateMap; // Used for key press logic - keeps track of previous key state
 
 std::vector<QueueActor> queuedActors;
@@ -277,9 +282,25 @@ void setupActor(PPCInterpreter_t* hCPU, TransferableData& trnsData, InstanceData
 	// dispatches this actor. The winning wrapper clears the state only after the
 	// actor-factory call returns.
 	trnsData.dispatchState = 1;
+	pending_spawn_sequence = ++spawn_request_sequence;
+	pending_spawn_name = qAct.Name;
+	last_observed_dispatch_state = -1;
 
 	trnsData.enabled = true; // This tells the assembly patch to trigger one function call
 	Logging::LoggerService::LogDebug("Submitted actor " + qAct.Name + " to BOTW's spawn function.", __FUNCTION__);
+	std::stringstream dispatchDetails;
+	dispatchDetails << "Spawn request " << pending_spawn_sequence << " arguments: function=0x"
+		<< std::hex << static_cast<uint32_t>(trnsData.fnAddr)
+		<< ", r3=0x" << static_cast<uint32_t>(trnsData.f_r3)
+		<< ", r4=0x" << static_cast<uint32_t>(trnsData.f_r4)
+		<< ", r5=0x" << static_cast<uint32_t>(trnsData.f_r5)
+		<< ", r6=0x" << static_cast<uint32_t>(trnsData.f_r6)
+		<< ", r7=0x" << static_cast<uint32_t>(trnsData.f_r7)
+		<< ", r8=0x" << static_cast<uint32_t>(trnsData.f_r8)
+		<< ", r9=0x" << static_cast<uint32_t>(trnsData.f_r9)
+		<< ", r10=0x" << static_cast<uint32_t>(trnsData.f_r10)
+		<< ", ring=0x" << static_cast<uint32_t>(trnsData.ringPtr) << ".";
+	Logging::LoggerService::LogDebug(dispatchDetails.str(), __FUNCTION__);
 
 	trnsData.interceptRegisters = false; // We don't want to intercept *this* function call
 
@@ -337,8 +358,37 @@ void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBu
 	}
 	// A PPC wrapper has not consumed the previous transaction yet. Leave every
 	// byte untouched; any wrapper may safely dispatch the shared arguments.
-	if (trnsData.enabled)
+	if (trnsData.enabled) {
+		if (trnsData.dispatchState != last_observed_dispatch_state) {
+			last_observed_dispatch_state = trnsData.dispatchState;
+			if (trnsData.dispatchState == 1) {
+				Logging::LoggerService::LogDebug(
+					"Spawn request " + std::to_string(pending_spawn_sequence) +
+					" (" + pending_spawn_name + ") is PPC-visible and awaiting an atomic claim.",
+					__FUNCTION__);
+			} else if (trnsData.dispatchState == 2) {
+				Logging::LoggerService::LogDebug(
+					"Spawn request " + std::to_string(pending_spawn_sequence) +
+					" (" + pending_spawn_name + ") was atomically claimed by a PPC wrapper.",
+					__FUNCTION__);
+			} else if (trnsData.dispatchState != 0) {
+				Logging::LoggerService::LogError(
+					"Spawn request " + std::to_string(pending_spawn_sequence) +
+					" has invalid PPC dispatch state " + std::to_string(trnsData.dispatchState) + ".",
+					__FUNCTION__);
+			}
+		}
 		return;
+	}
+	if (pending_spawn_sequence != 0) {
+		Logging::LoggerService::LogDebug(
+			"Spawn request " + std::to_string(pending_spawn_sequence) +
+			" (" + pending_spawn_name + ") returned from BOTW's actor factory.",
+			__FUNCTION__);
+		pending_spawn_sequence = 0;
+		pending_spawn_name.clear();
+		last_observed_dispatch_state = -1;
+	}
 	// No dispatch is pending, so natural actor-factory calls may refresh the
 	// template registers used to prepare the next synthetic actor.
 	trnsData.interceptRegisters = true;
@@ -361,6 +411,10 @@ void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBu
 	data_mutex.lock(); ////////////////////////////////////////////////////////////////////
 	memInstance->memory_writeMemoryBE(startTrnsData, trnsData, baseAddress);
 	if (dispatchReady) {
+		// The PPC wrapper observes Enabled before claiming DispatchState. Keep
+		// every argument and the ready state globally visible before publishing
+		// that byte, including on ARM hosts with a weaker memory model.
+		std::atomic_thread_fence(std::memory_order_release);
 		const byte enabled = 1;
 		memInstance->memory_writeMemory(startTrnsData, enabled, baseAddress);
 	}

@@ -27,6 +27,7 @@ namespace Main
 	void QueueBomb(std::string bombType, float Position[3]);
 	void Setup();
 	void PrepareGameInstance();
+	bool IsCemuTitleActive();
 	DWORD __stdcall ShowConnectionMessage(LPVOID);
 	void SetupAssemblyPatches();
 	bool ExternIsPaused();

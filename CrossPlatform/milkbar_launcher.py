@@ -303,7 +303,7 @@ def validation_errors(config: dict[str, Any]) -> list[str]:
     elif not os.access(cemu, os.X_OK):
         errors.append(f"Cemu is not executable: {cemu}")
     elif not cemu_has_hooks(cemu):
-        errors.append("Cemu does not export the two HLE hooks required by Hyrule Together; patch and build current Cemu with scripts/patch-cemu.sh.")
+        errors.append("Cemu does not export the native hooks required by Hyrule Together; patch and build current Cemu with scripts/patch-cemu.sh.")
     if not library.is_file():
         errors.append(f"Native client not found: {library} (run scripts/build-native.sh)")
     game_rpx = str(config.get("game_rpx", ""))
@@ -327,7 +327,9 @@ def cemu_has_hooks(cemu: Path) -> bool:
         symbols = subprocess.run(command, capture_output=True, text=True, timeout=10, check=False).stdout
     except (OSError, subprocess.TimeoutExpired):
         return False
-    return "memory_getBase" in symbols and "osLib_registerHLEFunction" in symbols
+    return ("memory_getBase" in symbols
+            and "osLib_registerHLEFunction" in symbols
+            and "milkbar_isTitleActive" in symbols)
 
 
 def _botw_suffix(config: dict[str, Any]) -> str:

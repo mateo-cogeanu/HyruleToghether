@@ -41,6 +41,17 @@ void Main::PrepareGameInstance()
         Game::GameInstance = new MemoryAccess::LocalInstance();
 }
 
+bool Main::IsCemuTitleActive()
+{
+    using IsTitleActiveType = bool (*)();
+    static IsTitleActiveType isTitleActive = reinterpret_cast<IsTitleActiveType>(
+        GetProcAddress(GetModuleHandleA("Cemu.exe"), "milkbar_isTitleActive"));
+
+    // Preserve compatibility with older Windows Cemu builds. Bundled macOS
+    // and Linux runtimes validate this export before launch.
+    return !isTitleActive || isTitleActive();
+}
+
 bool Main::connectToServer(std::string serverMessage)
 {
     connectionError.clear();
@@ -340,7 +351,7 @@ void Main::HelperThread()
 {
     Memory::MessagerService::StartMessagerService();
 
-    while (true)
+    while (Main::IsCemuTitleActive())
     {
         Memory::MessagerService::DisplayMessage();
 
@@ -723,15 +734,19 @@ float Main::GetDistance(int playerID, bool includeZAxis)
 
 bool Main::ExternIsPaused()
 {
-    return Game::GameInstance->IsPaused();
+    return !Main::IsCemuTitleActive() || Game::GameInstance->IsPaused();
 }
 
 void Main::QuestSync()
 {
+    if (!Main::IsCemuTitleActive())
+        return;
     Game::GameInstance->QuestService->QuestSyncer->setup(questServerSettings, ExternIsPaused);
 
     Sleep(5000);
 
+    if (!Main::IsCemuTitleActive())
+        return;
     Game::GameInstance->QuestService->QuestSyncer->readQuests();
 
     Main::QuestSyncReady = true;
@@ -842,7 +857,7 @@ void Main::PauseChecker()
 {
     DWORD lastPaused = GetTickCount();
 
-    while (true)
+    while (Main::IsCemuTitleActive())
     {
         Game::GameInstance->PauseMutex.lock();
 
@@ -1736,6 +1751,14 @@ void Main::mainServerLoop()
 
     while (true)
     {
+        if (!Main::IsCemuTitleActive())
+        {
+            Logging::LoggerService::LogInformation(
+                "BOTW title stopped; ending multiplayer without terminating Cemu.", __FUNCTION__);
+            client->close();
+            return;
+        }
+
         if (FirstCycle && !Game::GameInstance->IsPaused())
         {
             CreateThread(0, 0, (LPTHREAD_START_ROUTINE)HelperThread, 0, 0, 0);
@@ -1759,6 +1782,17 @@ void Main::mainServerLoop()
         if (!client->receiveBytes(&serverData[0]))
         {
             Main::disconnectFromServer("Connection to the server was lost while receiving data.");
+            return;
+        }
+
+        // A title can stop while this thread is blocked in receive(). Cemu
+        // publishes teardown before invalidating emulated memory, so recheck
+        // before deserialization results can drive any game-memory access.
+        if (!Main::IsCemuTitleActive())
+        {
+            Logging::LoggerService::LogInformation(
+                "BOTW title stopped during server receive; ending multiplayer without terminating Cemu.", __FUNCTION__);
+            client->close();
             return;
         }
 
