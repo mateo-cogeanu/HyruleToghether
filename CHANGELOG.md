@@ -39,6 +39,7 @@ All notable changes made while turning the original Windows-only Milk Bar Launch
 - Added setup diagnostics and clear validation errors for missing game, update, DLC, runtime, mod, or Cemu hooks.
 - Added launch-state reporting and automatic cleanup of stale IPC sockets and Cemu session state.
 - Fixed packaged Linux game launches reopening a second Hyrule Together window instead of Cemu. Frozen bundles now re-enter the executable through a dedicated backend-worker mode, while development and portable macOS builds continue to invoke the Python backend directly.
+- Prevented Linux Cemu from inheriting PyInstaller's private `LD_LIBRARY_PATH`. Cemu and its Graphic Pack Manager now load the host's matching X11, GTK, GLib, and Vulkan libraries instead of mixing packaged GUI libraries with the system GPU driver and crashing in `XGetXCBConnection`.
 - Added a Settings action that opens Cemu's built-in Graphic Pack Manager for BOTW, allowing FPS++, resolution packs, enhancements, and user-installed cheats to be managed without a separate Cemu setup.
 - Restored the application icon using the bundled `icon.png` asset.
 

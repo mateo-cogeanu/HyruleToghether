@@ -74,6 +74,23 @@ def clear_cemu_session(pid: int | None = None) -> None:
     path.unlink(missing_ok=True)
 
 
+def external_process_environment() -> dict[str, str]:
+    """Return an environment safe for native programs launched by the bundle."""
+    environment = os.environ.copy()
+    if sys.platform == "linux" and getattr(sys, "frozen", False):
+        # PyInstaller prepends its _internal directory to LD_LIBRARY_PATH so
+        # its own Qt application can start. Letting an external Cemu inherit
+        # that path mixes the bundled X11/GTK/GLib libraries with the host's
+        # Vulkan driver and can crash in XGetXCBConnection. PyInstaller saves
+        # the user's original value for precisely this child-process case.
+        original = environment.pop("LD_LIBRARY_PATH_ORIG", None)
+        if original:
+            environment["LD_LIBRARY_PATH"] = original
+        else:
+            environment.pop("LD_LIBRARY_PATH", None)
+    return environment
+
+
 def bundled_runtime_root() -> Path | None:
     executable = Path(sys.executable).resolve()
     candidates = [
@@ -383,7 +400,7 @@ def install_bundled_mod(config: dict[str, Any], force: bool = False) -> Path:
         "switch_config": None, "lang": "English",
     }
     (ukmm_root / "config" / "settings.yml").write_text(json.dumps(settings, indent=2), encoding="utf-8")
-    environment = os.environ.copy()
+    environment = external_process_environment()
     environment.update({
         "MILKBAR_UKMM_BASE": str(base_content),
         "MILKBAR_UKMM_UPDATE": str(update_content),
@@ -525,7 +542,7 @@ def command_launch(_: argparse.Namespace) -> int:
     listener.listen(1)
     listener.settimeout(120)
 
-    environment = os.environ.copy()
+    environment = external_process_environment()
     environment["MILKBAR_IPC_PATH"] = str(ipc_path)
     environment["MILKBAR_DATA_DIR"] = str(data_directory())
     environment["MILKBAR_CEMU_DATA_DIR"] = str(prepare_cemu_config())

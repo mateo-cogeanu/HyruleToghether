@@ -431,7 +431,9 @@ class MilkBarWindow(QMainWindow):
         self.graphics_process.setProgram(str(cemu))
         self.graphics_process.setArguments(["--mlc", str(backend.data_directory() / "cemu" / "mlc01"),
                                             "--graphic-packs", title_id])
-        environment = QProcessEnvironment.systemEnvironment()
+        environment = QProcessEnvironment()
+        for key, value in backend.external_process_environment().items():
+            environment.insert(key, value)
         environment.insert("MILKBAR_CEMU_DATA_DIR", str(config_dir))
         self.graphics_process.setProcessEnvironment(environment)
         self.graphics_process.finished.connect(self.graphic_packs_closed)

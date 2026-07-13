@@ -104,6 +104,10 @@ pressed. On Linux, `sys.executable` is the frozen Hyrule Together executable
 rather than a Python interpreter, so this worker starts the bundled Cemu
 instead of opening another launcher window.
 
+Before a frozen Linux launcher starts Cemu, it restores the host's original
+library search path. This keeps PyInstaller's private Qt/X11/GTK libraries out
+of Cemu and prevents them from being mixed with the system Vulkan driver.
+
 The Lobby Browser's **Host Server** action configures and starts the dedicated
 server in an interactive system terminal, adds its loopback address to the
 server list, and shuts the server down with the launcher. The terminal shows
