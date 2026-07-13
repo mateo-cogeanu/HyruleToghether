@@ -166,12 +166,7 @@ namespace MemoryAccess
 			if (pos.x() == 0 && pos.y() == 0 && pos.z() == 0)
 				pos = Position->get(__FUNCTION__);
 
-			// The old path deferred this through PlayerQueue and depended on the
-			// helper thread to transfer it later. On Linux that transfer could be
-			// missed while the HLE callback itself remained healthy. Queue the
-			// validated request directly while holding the shared spawn mutex.
-			float SpawnPos[3] = { pos.x(), pos.y(), pos.z() };
-			queuePlayer(playerNumber, SpawnPos);
+			PlayerQueue.insert(PlayerQueue.begin(), {playerNumber, pos});
 
 			queue_mutex->unlock();
 
@@ -192,6 +187,9 @@ namespace MemoryAccess
 				float SpawnPos[3] = { posToSpawn.x(), posToSpawn.y(), posToSpawn.z() };
 
 				queuePlayer(playerToSpawn, SpawnPos);
+				Logging::LoggerService::LogDebug(
+					"Transferred player " + std::to_string(playerToSpawn) + " to the HLE spawn queue.",
+					__FUNCTION__);
 			}
 
 			queue_mutex->unlock();
