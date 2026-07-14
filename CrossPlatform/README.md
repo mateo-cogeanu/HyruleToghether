@@ -137,6 +137,11 @@ merges the BNP against the player's own dumped game/update/DLC files and enables
 the resulting Cemu graphic pack automatically. The player does not need BCML,
 UKMM, or a separate mod-install step.
 
+Hyrule Together's custom player actors also require Cemu's BOTW **Extended
+Memory** community graphic pack. Download the current community packs once from
+**Manage Cemu Graphic Packs**; the launcher validates and enables Extended
+Memory automatically for every multiplayer launch.
+
 ## Runtime scope
 
 The desktop launcher covers setup, saved servers, background selection, model

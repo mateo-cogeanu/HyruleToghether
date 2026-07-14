@@ -348,6 +348,7 @@ def _botw_suffix(config: dict[str, Any]) -> str:
 def _configure_cemu_settings(directory: Path) -> None:
     target_api = "2" if sys.platform == "darwin" and platform.machine().lower() in ("arm64", "aarch64") else "1"
     merged_rules = "graphicPacks/BreathOfTheWild_UKMM/rules.txt"
+    extended_memory_rules = "graphicPacks/downloadedGraphicPacks/BreathOfTheWild/Mods/ExtendedMemory/rules.txt"
     old_rules = "graphicPacks/MilkBarLauncher/rules.txt"
     settings = directory / "settings.xml"
     if settings.exists():
@@ -383,9 +384,23 @@ def _configure_cemu_settings(directory: Path) -> None:
     if merged_pack.is_file() and not any(entry.get("filename") == merged_rules for entry in packs.findall("Entry")):
         ET.SubElement(packs, "Entry", filename=merged_rules)
         changed = True
+    extended_memory_pack = directory / extended_memory_rules
+    if (extended_memory_pack.is_file()
+            and not any(entry.get("filename") == extended_memory_rules for entry in packs.findall("Entry"))):
+        ET.SubElement(packs, "Entry", filename=extended_memory_rules)
+        changed = True
     if changed:
         directory.mkdir(parents=True, exist_ok=True)
         tree.write(settings, encoding="utf-8", xml_declaration=True)
+
+
+def _require_extended_memory_pack(directory: Path) -> None:
+    rules = directory / "graphicPacks" / "downloadedGraphicPacks" / "BreathOfTheWild" / "Mods" / "ExtendedMemory" / "rules.txt"
+    if not rules.is_file():
+        raise RuntimeError(
+            "Hyrule Together requires BOTW's Extended Memory graphic pack. "
+            "Open Manage Cemu Graphic Packs, download the latest community packs, then launch again."
+        )
 
 
 def install_bundled_mod(config: dict[str, Any], force: bool = False) -> Path:
@@ -422,6 +437,7 @@ def install_bundled_mod(config: dict[str, Any], force: bool = False) -> Path:
     output_pack = graphics / "BreathOfTheWild_UKMM"
     marker = output_pack / ".milkbar-signature"
     if not force and marker.is_file() and marker.read_text(encoding="utf-8").strip() == signature:
+        _require_extended_memory_pack(cemu_root / "config")
         _configure_cemu_settings(cemu_root / "config")
         return output_pack
 
@@ -496,6 +512,7 @@ def install_bundled_mod(config: dict[str, Any], force: bool = False) -> Path:
     for cache in shader_cache.glob("**/00050000101c9*"):
         if cache.is_file():
             cache.unlink()
+    _require_extended_memory_pack(cemu_root / "config")
     _configure_cemu_settings(cemu_root / "config")
     return output_pack
 
