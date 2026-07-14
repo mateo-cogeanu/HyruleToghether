@@ -1,3 +1,3 @@
 # Repository instructions
 
-Update `CHANGELOG.md` for every meaningful change. Commit and push completed work to `https://github.com/mateo-cogeanu/HyruleToghether.git`.
+Update `CHANGELOG.md` for every meaningful change. Commit and push completed work to `https://github.com/mateo-cogeanu/HyruleTogether.git`.

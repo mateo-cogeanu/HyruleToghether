@@ -6,6 +6,7 @@ All notable changes made while turning the original Windows-only Milk Bar Launch
 
 ### Project identity
 
+- Corrected the GitHub repository name from the misspelled `HyruleToghether` to `HyruleTogether` and updated the repository instructions accordingly.
 - Renamed the user-facing application from **Milk Bar Launcher** to **Hyrule Together**.
 - Updated the Qt application name, window titles, footer, dialogs, server-hosting labels, command-line description, macOS bundle display name, executable name, package names, and primary documentation.
 - Changed the macOS bundle identifier to `app.hyruletogether.launcher`.
