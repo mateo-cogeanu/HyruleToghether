@@ -1,5 +1,7 @@
 #pragma once
 
+#include <mutex>
+
 #include "Actor.h"
 #include "EquipmentAccess.h"
 #include "BumiiAccess.h"
