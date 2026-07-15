@@ -58,6 +58,16 @@ namespace MemoryAccess
 
 		std::thread pThread;
 		std::atomic<bool> RunThread{ false };
+		std::atomic<bool> SpawnPending{ false };
+		DWORD SpawnRequestedAt = 0;
+#ifndef _WIN32
+		std::atomic<bool> AnimationControlsResolved{ false };
+		DWORD LastAnimationControlScan = 0;
+		bool AnimationControlScanLogged = false;
+		uint64_t ArchiveAnimAddr = 0;
+		uint64_t ArchiveAttackAddr = 0;
+		uint64_t ArchiveHoldAddr = 0;
+#endif
 
 		enum ActionEnum
 		{
@@ -81,6 +91,29 @@ namespace MemoryAccess
 			if (actorFlags.MapPin != 0)
 				MapPin = new Vec3fBE(actorFlags.MapPin, __FUNCTION__);
 			AttackAddr = actorFlags.AttackAnimation;
+#ifndef _WIN32
+			// The addresses found while scanning GameData point into the loaded
+			// BFEVFL archive. Native Cemu evaluates deserialized parameter copies,
+			// which only become available once the actor's flow is instantiated.
+			ArchiveAnimAddr = AnimAddr;
+			ArchiveAttackAddr = AttackAddr;
+			ArchiveHoldAddr = HoldAddr;
+			AnimAddr = 0;
+			AttackAddr = 0;
+			HoldAddr = 0;
+#endif
+		}
+
+		void InvalidateNativeAnimationControls()
+		{
+#ifndef _WIN32
+			AnimationControlsResolved.store(false, std::memory_order_release);
+			LastAnimationControlScan = 0;
+			AnimationControlScanLogged = false;
+			AnimAddr = 0;
+			AttackAddr = 0;
+			HoldAddr = 0;
+#endif
 		}
 
 		void setAddress(uint64_t addr)
@@ -348,6 +381,9 @@ namespace MemoryAccess
 
 	private:
 		void PThread();
+#ifndef _WIN32
+		bool ResolveNativeAnimationControls();
+#endif
 
 		void LogAnimationSyncOnce(const std::string& control, int animation, uint64_t address,
 			int status, bool attack)

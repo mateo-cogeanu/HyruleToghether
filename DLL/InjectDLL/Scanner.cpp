@@ -164,11 +164,26 @@ std::vector<uint64_t> Memory::PatternScanMultiple(std::vector<int> signature, ui
 {
     std::vector<uint64_t> result;
 
+#ifndef _WIN32
+    const bool nativeCemuHeap = region == 8;
+    const uint64_t nativeStartAddress = baseAddr;
+    const uint64_t nativeEndAddress = baseAddr + 0x100000000ULL;
+    if (nativeCemuHeap)
+    {
+        region = 0;
+        regionOffset = 0;
+    }
+#endif
+
     SYSTEM_INFO si;
     GetSystemInfo(&si);
 
     uint64_t startAddress = baseAddr;
     uint64_t endAddress = (uint64_t)(si.lpMaximumApplicationAddress);
+#ifndef _WIN32
+    if (nativeCemuHeap)
+        endAddress = nativeEndAddress;
+#endif
 
     MEMORY_BASIC_INFORMATION mbi{ 0 };
     DWORD protectflags = (PAGE_GUARD | PAGE_NOCACHE | PAGE_NOACCESS);
@@ -224,6 +239,20 @@ std::vector<uint64_t> Memory::PatternScanMultiple(std::vector<int> signature, ui
 
             uint64_t startingAddress = 0;
             uint64_t endAddress = mbi.RegionSize - signature.size();
+
+#ifndef _WIN32
+            if (nativeCemuHeap && nativeStartAddress > (uint64_t)mbi.BaseAddress)
+            {
+                uint64_t requested = nativeStartAddress - (uint64_t)mbi.BaseAddress;
+                if (requested < mbi.RegionSize)
+                    startingAddress = requested;
+            }
+            if (nativeCemuHeap &&
+                (uint64_t)mbi.BaseAddress + endAddress > nativeEndAddress)
+            {
+                endAddress = nativeEndAddress - (uint64_t)mbi.BaseAddress;
+            }
+#endif
 
             if (region != 0 && regionOffset != 0)
             {

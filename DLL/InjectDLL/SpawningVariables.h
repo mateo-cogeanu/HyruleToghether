@@ -612,7 +612,9 @@ void OnActorCreate(PPCInterpreter_t* hCPU)
 		stream << "Spawned player " << spawnedPlayer << " at: " << std::hex << Main::baseAddr + hCPU->gpr[3] << ". Setting up addresses.";
 		Logging::LoggerService::LogDebug(stream.str(), __FUNCTION__);
 
+		player->second->InvalidateNativeAnimationControls();
 		player->second->setAddress(hCPU->gpr[3]);
+		player->second->SpawnPending.store(false, std::memory_order_release);
 		player->second->Equipment->SetWeapons(hCPU->gpr[3]);
 		player->second->Equipment->SetArmor();
 		player->second->Bumii->setAddress(hCPU->gpr[3]);
@@ -712,6 +714,8 @@ void OnActorErase(PPCInterpreter_t* hCPU)
 		}
 		else
 			player->second->Status->set(0, __FUNCTION__);
+		player->second->SpawnPending.store(false, std::memory_order_release);
+		player->second->InvalidateNativeAnimationControls();
 		player->second->setAddress(0);
 		std::stringstream stream;
 		stream << "Player " << spawnedPlayer << " erased.";

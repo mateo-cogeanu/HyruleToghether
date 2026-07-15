@@ -7,6 +7,107 @@ namespace Main
 	bool IsCemuTitleActive();
 }
 
+#ifndef _WIN32
+bool Player::ResolveNativeAnimationControls()
+{
+	if (AnimationControlsResolved.load(std::memory_order_acquire))
+		return true;
+	if (ArchiveAnimAddr == 0 || ArchiveAttackAddr == 0 || ArchiveHoldAddr == 0)
+		return false;
+	if (LastAnimationControlScan != 0 &&
+		float(GetTickCount() - LastAnimationControlScan) / 1000.0f < 2.0f)
+		return AnimAddr != 0;
+	LastAnimationControlScan = GetTickCount();
+
+	const std::string prefix = "Jugador" + std::to_string(PlayerNumber) + "_";
+	const std::string normal = prefix + "animationthing";
+	const std::string attack = prefix + "AttackAnimation";
+	const std::string hold = prefix + "Hold";
+	std::vector<int> signature(prefix.begin(), prefix.end());
+	auto copies = Memory::PatternScanMultiple(
+		signature, Memory::getBaseAddress(), 8, 0, false, 0, 0);
+
+	uint64_t liveNormal = 0;
+	uint64_t liveAttack = 0;
+	uint64_t liveHold = 0;
+	int normalCopies = 0;
+	int attackCopies = 0;
+	int holdCopies = 0;
+	for (uint64_t copy : copies)
+	{
+		if (Memory::read_string(copy, normal.size(), __FUNCTION__) == normal)
+		{
+			liveNormal = std::max(liveNormal, copy);
+			normalCopies++;
+		}
+		else if (Memory::read_string(copy, attack.size(), __FUNCTION__) == attack)
+		{
+			liveAttack = std::max(liveAttack, copy);
+			attackCopies++;
+		}
+		else if (Memory::read_string(copy, hold.size(), __FUNCTION__) == hold)
+		{
+			liveHold = std::max(liveHold, copy);
+			holdCopies++;
+		}
+	}
+
+	// One copy is the archive payload. A second, higher copy proves that Cemu
+	// deserialized the parameter block. The normal placeholder may already have
+	// been replaced by EventFlow before this player connects, so use any intact
+	// control as an anchor and preserve the archive block's relative offsets.
+	bool normalWasMissing = AnimAddr == 0;
+	if (normalCopies >= 2)
+		AnimAddr = liveNormal;
+	if (attackCopies >= 2)
+		AttackAddr = liveAttack;
+	if (holdCopies >= 2)
+		HoldAddr = liveHold;
+	auto projectLiveAddress = [](uint64_t liveAnchor, uint64_t archiveAnchor, uint64_t archiveTarget)
+	{
+		return uint64_t(int64_t(liveAnchor) +
+			(int64_t(archiveTarget) - int64_t(archiveAnchor)));
+	};
+	if (attackCopies >= 2)
+	{
+		AnimAddr = projectLiveAddress(liveAttack, ArchiveAttackAddr, ArchiveAnimAddr);
+		HoldAddr = projectLiveAddress(liveAttack, ArchiveAttackAddr, ArchiveHoldAddr);
+	}
+	else if (holdCopies >= 2)
+	{
+		AnimAddr = projectLiveAddress(liveHold, ArchiveHoldAddr, ArchiveAnimAddr);
+		AttackAddr = projectLiveAddress(liveHold, ArchiveHoldAddr, ArchiveAttackAddr);
+	}
+	else if (normalCopies >= 2)
+	{
+		AttackAddr = projectLiveAddress(liveNormal, ArchiveAnimAddr, ArchiveAttackAddr);
+		HoldAddr = projectLiveAddress(liveNormal, ArchiveAnimAddr, ArchiveHoldAddr);
+	}
+
+	bool allRequiredControls = AnimAddr != 0 && AttackAddr != 0;
+	AnimationControlsResolved.store(allRequiredControls, std::memory_order_release);
+	if (normalWasMissing && AnimAddr != 0)
+	{
+		std::stringstream stream;
+		stream << "Resolved live player " << PlayerNumber
+			<< " EventFlow controls: normal=0x" << std::hex << AnimAddr
+			<< ", attack=0x" << AttackAddr << ", hold=0x" << HoldAddr << ".";
+		Logging::LoggerService::LogInformation(stream.str(), __FUNCTION__);
+	}
+	else if (!AnimationControlScanLogged)
+	{
+		std::stringstream stream;
+		stream << "Waiting for live player " << PlayerNumber
+			<< " EventFlow controls (normal copies=" << normalCopies
+			<< ", attack copies=" << attackCopies
+			<< ", hold copies=" << holdCopies << ").";
+		Logging::LoggerService::LogDebug(stream.str(), __FUNCTION__);
+		AnimationControlScanLogged = true;
+	}
+	return AnimAddr != 0;
+}
+#endif
+
 void Player::PThread()
 {
 	float FunctionTime = 0; // In milliseconds
@@ -26,6 +127,13 @@ void Player::PThread()
 				Sleep(100);
 				continue;
 			}
+
+#ifndef _WIN32
+			// EventFlow may deserialize the controls before the actor callback.
+			// Resolve eagerly when possible, but do not delay the spawn request if
+			// the live copies do not exist yet.
+			bool animationControlsReady = ResolveNativeAnimationControls();
+#endif
 
 			DWORD TimerStart = GetTickCount();
 
@@ -71,6 +179,18 @@ void Player::PThread()
 
 			if (exists && !shouldExist)
 				action = ActDelete;
+
+			if (this->SpawnPending.load(std::memory_order_acquire))
+			{
+				if (float(GetTickCount() - this->SpawnRequestedAt) / 1000.0f <= 10.0f)
+					action = ActSkip;
+				else
+				{
+					this->SpawnPending.store(false, std::memory_order_release);
+					Logging::LoggerService::LogWarning(
+						"Remote actor spawn callback timed out; allowing one retry.", __FUNCTION__);
+				}
+			}
 
 			if (action == ActDelete)
 			{
@@ -172,6 +292,8 @@ void Player::PThread()
 					continue;
 				}
 
+				this->SpawnRequestedAt = GetTickCount();
+				this->SpawnPending.store(true, std::memory_order_release);
 				GameInstance->RequestCreate(this->PlayerNumber, this->LastServerPosition);
 				this->Exists->set(false, __FUNCTION__);
 
@@ -182,6 +304,14 @@ void Player::PThread()
 
 			if (!Main::IsCemuTitleActive())
 				break;
+
+#ifndef _WIN32
+			if (!animationControlsReady)
+			{
+				Sleep(250);
+				continue;
+			}
+#endif
 
 			if (this->baseAddr == 0)
 			{
