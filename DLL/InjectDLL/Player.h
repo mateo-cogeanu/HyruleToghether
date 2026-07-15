@@ -85,6 +85,7 @@ namespace MemoryAccess
 		{
 			GameInstance = instance;
 			PlayerNumber = playerNumber;
+			Equipment->SetPlayerNumber(playerNumber);
 
 			Exists = new LittleEndian<bool>(actorFlags.ExistsFlag, __FUNCTION__);
 			DispName = new LittleEndian<bool>(actorFlags.DispNameFlag, __FUNCTION__);

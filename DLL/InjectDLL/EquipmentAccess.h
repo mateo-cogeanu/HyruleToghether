@@ -12,6 +12,12 @@ namespace DataTypes
 		bool NeedsActorRefresh = false;
 		CharacterEquipment* LastKnown = new CharacterEquipment{};
 		std::string lastBase = "Jugador1ModelNameLongForASpecificReasonHead";
+		int PlayerNumber = 0;
+
+		void SetPlayerNumber(int playerNumber)
+		{
+			PlayerNumber = playerNumber;
+		}
 
 		bool Compare(CharacterEquipment newEquipment)
 		{
@@ -72,46 +78,57 @@ namespace DataTypes
 
 		void SetWeapons(uint64_t baseAddr)
 		{
-			std::string RIGHT_DEFAULT = "RightHandWeaponLongName";
-			std::string LEFT_DEFAULT = "LeftHandWeaponLongName";
+			const std::string playerPrefix = "Jugador" + std::to_string(PlayerNumber);
+			const std::string RIGHT_DEFAULT = playerPrefix + "RightHandWeaponLongName";
+			const std::string LEFT_DEFAULT = playerPrefix + "LeftHandWeaponLongName";
+			const std::string BOW_DEFAULT = playerPrefix + "BowWeaponLongName";
 
 			FindWeaponAddr(baseAddr);
+			FindWeaponTemplateAddrs(RIGHT_DEFAULT, LEFT_DEFAULT, BOW_DEFAULT);
 
 			uint64_t OldAddress = ArmorAddrs.Face;
 
 			FindArmorAddr(baseAddr);
 
-			std::string RightHandWeapon = "Weapon_Null_";
-			std::string LeftHandWeapon = "Weapon_Shield_";
+			std::string RightHandWeapon;
+			std::string LeftHandWeapon;
+			std::string BowWeapon;
 
-			switch (LastKnown->WType)
+			if (LastKnown->Sword != 0)
 			{
-			case 1:
-				RightHandWeapon.replace(RightHandWeapon.find("Null"), 4, "Sword");
-				break;
-			case 2:
-				RightHandWeapon.replace(RightHandWeapon.find("Null"), 4, "Lsword");
-				break;
-			case 3:
-				RightHandWeapon.replace(RightHandWeapon.find("Null"), 4, "Spear");
-				break;
+				switch (LastKnown->WType)
+				{
+				case 1:
+					RightHandWeapon = "Weapon_Sword_" + NumToStr(LastKnown->Sword);
+					break;
+				case 2:
+					RightHandWeapon = "Weapon_Lsword_" + NumToStr(LastKnown->Sword);
+					break;
+				case 3:
+					RightHandWeapon = "Weapon_Spear_" + NumToStr(LastKnown->Sword);
+					break;
+				}
 			}
-			// Jugador's GeneralParamList exposes exactly two actor equipment
-			// entries: Weapon_R and Weapon_L. When no melee weapon is equipped,
-			// Weapon_R is the valid slot for the equipped bow as well.
-			if (LastKnown->WType == 0 && LastKnown->Bow != 0)
-				RightHandWeapon = "Weapon_Bow_" + NumToStr(LastKnown->Bow);
-			else
-				RightHandWeapon += NumToStr(LastKnown->Sword);
-			LeftHandWeapon += NumToStr(LastKnown->Shield);
+			if (LastKnown->Shield != 0)
+				LeftHandWeapon = "Weapon_Shield_" + NumToStr(LastKnown->Shield);
+			if (LastKnown->Bow != 0)
+				BowWeapon = "Weapon_Bow_" + NumToStr(LastKnown->Bow);
 
 			Mutex.lock();
 
-			Memory::write_string(WeaponAddrs.Right, RightHandWeapon, RIGHT_DEFAULT.size() + 8, __FUNCTION__);
-			Memory::write_string(WeaponAddrs.Left, LeftHandWeapon, LEFT_DEFAULT.size() + 8, __FUNCTION__);
+			WriteWeaponResource(
+				WeaponTemplateAddrs.Right, WeaponAddrs.Right,
+				RightHandWeapon, RIGHT_DEFAULT.size() + 1);
+			WriteWeaponResource(
+				WeaponTemplateAddrs.Left, WeaponAddrs.Left,
+				LeftHandWeapon, LEFT_DEFAULT.size() + 1);
+			WriteWeaponResource(
+				WeaponTemplateAddrs.Bow, WeaponAddrs.Bow,
+				BowWeapon, BOW_DEFAULT.size() + 1);
 			Logging::LoggerService::LogInformation(
-				"Equipment setup: right=" + RightHandWeapon +
-				", left=" + LeftHandWeapon + ".",
+				"Equipment setup: weapon=" + (RightHandWeapon.empty() ? "none" : RightHandWeapon) +
+				", shield=" + (LeftHandWeapon.empty() ? "none" : LeftHandWeapon) +
+				", bow=" + (BowWeapon.empty() ? "none" : BowWeapon) + ".",
 				__FUNCTION__);
 
 			if (OldAddress == ArmorAddrs.Face)
@@ -265,6 +282,9 @@ namespace DataTypes
 					addr = Memory::read_bigEndian4BytesOffset(temp + 0x4, __FUNCTION__);
 					this->WeaponAddrs.Right = Memory::read_bigEndian4BytesOffset(addr + 0x1C, __FUNCTION__) + Memory::getBaseAddress();
 					this->WeaponAddrs.Left = Memory::read_bigEndian4BytesOffset(addr + 0xA0, __FUNCTION__) + Memory::getBaseAddress();
+					uint32_t bowAddress = 0;
+					if (Memory::TryReadBigEndian4BytesOffset(addr + 0x124, bowAddress) && bowAddress != 0)
+						this->WeaponAddrs.Bow = bowAddress + Memory::getBaseAddress();
 				}
 
 				iterator++;
@@ -299,12 +319,77 @@ namespace DataTypes
 
 	private:
 		std::shared_mutex Mutex;
+		bool WeaponTemplateScanComplete = false;
+
+		void FindWeaponTemplateAddrs(
+			const std::string& rightPlaceholder,
+			const std::string& leftPlaceholder,
+			const std::string& bowPlaceholder)
+		{
+			if (WeaponTemplateScanComplete || PlayerNumber <= 0)
+				return;
+
+			const std::string prefix = "Jugador" + std::to_string(PlayerNumber);
+			std::vector<int> signature(prefix.begin(), prefix.end());
+			for (uint64_t address : Memory::PatternScanMultiple(
+				signature, Memory::getBaseAddress(), 8, 0, false, 0, 0))
+			{
+				std::string value = Memory::read_string(address, 64, __FUNCTION__);
+				if (value == rightPlaceholder &&
+					std::find(WeaponTemplateAddrs.Right.begin(), WeaponTemplateAddrs.Right.end(), address) ==
+						WeaponTemplateAddrs.Right.end())
+					WeaponTemplateAddrs.Right.push_back(address);
+				else if (value == leftPlaceholder &&
+					std::find(WeaponTemplateAddrs.Left.begin(), WeaponTemplateAddrs.Left.end(), address) ==
+						WeaponTemplateAddrs.Left.end())
+					WeaponTemplateAddrs.Left.push_back(address);
+				else if (value == bowPlaceholder &&
+					std::find(WeaponTemplateAddrs.Bow.begin(), WeaponTemplateAddrs.Bow.end(), address) ==
+						WeaponTemplateAddrs.Bow.end())
+					WeaponTemplateAddrs.Bow.push_back(address);
+			}
+			WeaponTemplateScanComplete =
+				!WeaponTemplateAddrs.Right.empty() &&
+				!WeaponTemplateAddrs.Left.empty() &&
+				!WeaponTemplateAddrs.Bow.empty();
+
+			Logging::LoggerService::LogInformation(
+				"Resolved player " + std::to_string(PlayerNumber) +
+				" persistent equipment templates: weapon=" +
+				std::to_string(WeaponTemplateAddrs.Right.size()) +
+				", shield=" + std::to_string(WeaponTemplateAddrs.Left.size()) +
+				", bow=" + std::to_string(WeaponTemplateAddrs.Bow.size()) + ".",
+				__FUNCTION__);
+		}
+
+		void WriteWeaponResource(
+			const std::vector<uint64_t>& templateAddresses,
+			uint64_t actorAddress,
+			const std::string& resource,
+			size_t capacity)
+		{
+			for (uint64_t address : templateAddresses)
+				Memory::write_string(address, resource, static_cast<int>(capacity), __FUNCTION__);
+			if (actorAddress != 0 &&
+				std::find(templateAddresses.begin(), templateAddresses.end(), actorAddress) == templateAddresses.end())
+			{
+				Memory::write_string(actorAddress, resource, static_cast<int>(capacity), __FUNCTION__);
+			}
+		}
 
 		struct WeaponAddr 
 		{
 			uint64_t Left = 0;
 			uint64_t Right = 0;
+			uint64_t Bow = 0;
 		} WeaponAddrs;
+
+		struct WeaponTemplateAddr
+		{
+			std::vector<uint64_t> Left;
+			std::vector<uint64_t> Right;
+			std::vector<uint64_t> Bow;
+		} WeaponTemplateAddrs;
 
 		struct ArmorAddr
 		{
