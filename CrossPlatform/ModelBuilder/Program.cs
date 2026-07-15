@@ -142,11 +142,90 @@ static void PatchTitleArchive(string titlePath)
         throw new InvalidDataException("UKMM's TitleBG.pack must be an uncompressed SARC archive");
 
     (int start, int end) = FindSarcEntryRange(title, "EventFlow/MultiplayerEvent.bfevfl");
-    int patched = PatchRemoteDeleteStatus(title.AsSpan(start, end - start));
-    if (patched != 32)
-        throw new InvalidDataException($"Expected 32 remote-player delete checks, patched {patched}");
+    Span<byte> eventFlow = title.AsSpan(start, end - start);
+    int deleteChecksPatched = PatchRemoteDeleteStatus(eventFlow);
+    if (deleteChecksPatched != 32)
+        throw new InvalidDataException(
+            $"Expected 32 remote-player delete checks, patched {deleteChecksPatched}");
+    int animationRetriesPatched = PatchRemoteAnimationRetry(eventFlow);
+    if (animationRetriesPatched != 32)
+        throw new InvalidDataException(
+            $"Expected 32 remote-player animation actions, patched {animationRetriesPatched}");
     File.WriteAllBytes(titlePath, title);
-    Console.WriteLine("Patched 32 remote-player EventFlow delete checks without rebuilding TitleBG.pack.");
+    Console.WriteLine(
+        "Patched 32 remote-player delete checks and 32 animation retries without rebuilding TitleBG.pack.");
+}
+
+static int PatchRemoteAnimationRetry(Span<byte> eventFlow)
+{
+    if (eventFlow.Length < 0x38 || !eventFlow[..8].SequenceEqual("BFEVFL\0\0"u8))
+        throw new InvalidDataException("MultiplayerEvent is not a BFEVFL archive");
+
+    int flowchartPointerArray = ReadOffset(eventFlow, 0x28);
+    int flowchart = ReadOffset(eventFlow, flowchartPointerArray);
+    RequireRange(eventFlow, flowchart, 0x38);
+    if (!eventFlow.Slice(flowchart, 4).SequenceEqual("EVFL"u8))
+        throw new InvalidDataException("MultiplayerEvent has no EVFL flowchart");
+
+    int eventCount = Read16LE(eventFlow, flowchart + 0x16);
+    int events = ReadOffset(eventFlow, flowchart + 0x30);
+    RequireRange(eventFlow, events, checked(eventCount * 0x28));
+    int patched = 0;
+
+    for (int index = 0; index < eventCount; index++)
+    {
+        int eventOffset = events + index * 0x28;
+        if (eventFlow[eventOffset + 8] != 0) // ActionEvent
+            continue;
+
+        int parameters = ReadOffset(eventFlow, eventOffset + 0x10);
+        if (parameters == 0)
+            continue;
+        RequireRange(eventFlow, parameters, 0x10);
+        int itemCount = Read16LE(eventFlow, parameters + 2);
+        RequireRange(eventFlow, parameters + 0x10, checked(itemCount * 8));
+        bool remoteNormalAnimation = false;
+        List<int> enabledBoolOffsets = new();
+
+        for (int itemIndex = 0; itemIndex < itemCount; itemIndex++)
+        {
+            int item = ReadOffset(eventFlow, parameters + 0x10 + itemIndex * 8);
+            RequireRange(eventFlow, item, 0x14);
+            byte type = eventFlow[item];
+            if (type == 3 && Read32LE(eventFlow, item + 0x10) != 0) // Bool
+            {
+                enabledBoolOffsets.Add(item + 0x10);
+            }
+            else if (type == 5) // String
+            {
+                int stringOffset = ReadOffset(eventFlow, item + 0x10);
+                RequireRange(eventFlow, stringOffset, 2);
+                int length = Read16LE(eventFlow, stringOffset);
+                RequireRange(eventFlow, stringOffset + 2, length);
+                string text = System.Text.Encoding.UTF8.GetString(
+                    eventFlow.Slice(stringOffset + 2, length));
+                if (text.StartsWith("Jugador", StringComparison.Ordinal) &&
+                    text.EndsWith("_animationthing", StringComparison.Ordinal))
+                    remoteNormalAnimation = true;
+            }
+        }
+
+        // The normal animation action originally ignored every invocation after
+        // its first one. Native Cemu can evaluate the placeholder during actor
+        // startup, before the client writes the first Anim_<hash>, leaving that
+        // actor permanently in its bind pose. IsWaitFinish is already false, so
+        // IsIgnoreSame is the only enabled bool in these parameter containers.
+        if (remoteNormalAnimation && enabledBoolOffsets.Count <= 1)
+        {
+            if (enabledBoolOffsets.Count == 1)
+            {
+                System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(
+                    eventFlow.Slice(enabledBoolOffsets[0], 4), 0);
+            }
+            patched++;
+        }
+    }
+    return patched;
 }
 
 static int PatchRemoteDeleteStatus(Span<byte> eventFlow)
@@ -211,6 +290,10 @@ static int PatchRemoteDeleteStatus(Span<byte> eventFlow)
         {
             System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(
                 eventFlow.Slice(valueOffset, 4), 3);
+            patched++;
+        }
+        else if (remoteStatusCheck && valueOffset >= 0 && value == 3)
+        {
             patched++;
         }
     }

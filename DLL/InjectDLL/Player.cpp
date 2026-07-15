@@ -12,6 +12,9 @@ bool Player::ResolveNativeAnimationControls()
 {
 	if (AnimationControlsResolved.load(std::memory_order_acquire))
 		return true;
+	std::lock_guard<std::mutex> animationControlLock(AnimationControlMutex);
+	if (AnimationControlsResolved.load(std::memory_order_acquire))
+		return true;
 	if (ArchiveAnimAddr == 0 || ArchiveAttackAddr == 0 || ArchiveHoldAddr == 0)
 		return false;
 	if (LastAnimationControlScan != 0 &&

@@ -77,6 +77,7 @@ All notable changes made while turning the original Windows-only Milk Bar Launch
 
 ### Cross-platform native client
 
+- Fixed the remaining native-Cemu remote-player T-pose race. The client now stages the latest normal animation before actor creation, and the generated multiplayer EventFlow no longer permanently suppresses `Demo_PlayASForDemo` after an initial placeholder request; all 32 player actions retry each frame until the live `Anim_<hash>` control is consumed.
 - Fixed persistent remote-player T-poses on native macOS Cemu. The client now finds Cemu's deserialized live EventFlow parameter block instead of writing animation names into the inactive loaded-archive copy, derives already-replaced normal-animation controls from intact attack/equipment anchors, and refreshes those addresses whenever a remote actor is recreated.
 - Prevented duplicate remote actors when Cemu's asynchronous spawn callback takes longer than the old three-second retry interval. A spawn remains pending until its callback arrives or a bounded timeout permits one retry.
 - Fixed a macOS SIGABRT during startup when the optional remote map-pin signature is absent. Map-pin discovery now times out as a non-fatal capability, validates the remaining contiguous layout with a bound, and remote players skip map writes when no address is available, allowing the already-resolved EventFlow animation controls to proceed.

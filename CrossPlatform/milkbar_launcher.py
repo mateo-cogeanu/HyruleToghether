@@ -26,7 +26,7 @@ CEMU_RUNTIMES = {
     "Linux_arm64": "Linux arm64",
 }
 
-UKMM_DEPLOYMENT_SCHEMA = b"animation-delete-status-v3"
+UKMM_DEPLOYMENT_SCHEMA = b"animation-eventflow-retry-v4"
 REQUIRED_MULTIPLAYER_GAME_DATA = (
     b"Jugador1_Hold",
     b"Jugador1_animationthing",

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <mutex>
 
 #include "Actor.h"
 #include "EquipmentAccess.h"
@@ -67,6 +68,7 @@ namespace MemoryAccess
 		uint64_t ArchiveAnimAddr = 0;
 		uint64_t ArchiveAttackAddr = 0;
 		uint64_t ArchiveHoldAddr = 0;
+		std::mutex AnimationControlMutex;
 #endif
 
 		enum ActionEnum
@@ -107,6 +109,7 @@ namespace MemoryAccess
 		void InvalidateNativeAnimationControls()
 		{
 #ifndef _WIN32
+			std::lock_guard<std::mutex> animationControlLock(AnimationControlMutex);
 			AnimationControlsResolved.store(false, std::memory_order_release);
 			LastAnimationControlScan = 0;
 			AnimationControlScanLogged = false;
@@ -137,14 +140,26 @@ namespace MemoryAccess
 
 			LastServerPosition = PlayerData->Position;
 
-			if (this->baseAddr == 0)
-				return;
-
 			if (!PlayerData->Updated)
 				return;
 
 			const std::string DEFAULT_ANIM = "Jugador" + std::to_string(PlayerNumber) + "_animationthing";
 			const std::string DEFAULT_ATTACK = "Jugador" + std::to_string(PlayerNumber) + "_AttackAnimation";
+
+#ifndef _WIN32
+			// Prime the normal EventFlow parameter before the actor begins its
+			// per-frame flow. Otherwise its first Demo_PlayASForDemo request can
+			// observe the placeholder and leave the actor in its bind pose.
+			if (!isPaused && ResolveNativeAnimationControls() && AnimAddr != 0)
+			{
+				const std::string initialControl =
+					"Anim_" + std::to_string(UINT32(PlayerData->Animation));
+				Memory::write_string(AnimAddr, initialControl, DEFAULT_ANIM.size(), __FUNCTION__);
+			}
+#endif
+
+			if (this->baseAddr == 0)
+				return;
 
 			/* Attack detection
 			Animations stored in AttackAnimations are the animations we have identified as attack such as Sword_Attack_S1
