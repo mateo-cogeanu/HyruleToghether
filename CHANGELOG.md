@@ -142,6 +142,12 @@ All notable changes made while turning the original Windows-only Milk Bar Launch
   the remote actor exposes two equipment entries, not three, so bows now use its
   valid right-hand entry when no melee weapon is equipped. Local equipment reads
   are zero-initialized so absent items cannot cause random refresh loops.
+- Fixed the macOS PPC crash when an equipment refresh returned through Cemu's
+  multicore function dispatcher. Direct refresh deletes now bypass the early
+  `deleteLater` HLE callback and wait for BOTW's real actor-erasure callback
+  before respawning. Actor erase/create also resets the direct AS completion
+  cache so a reused actor address cannot leave the replacement T-posed on the
+  other platform.
 - Bundled a target-native model-builder utility.
 - Added automatic creation and validation of the remote-player BFRES model assets.
 - Added automatic UKMM merge against the user's own decrypted base game, update, and DLC files.

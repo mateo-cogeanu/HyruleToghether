@@ -360,6 +360,20 @@ void queueRemoteActorRefresh(int playerNumber, uint64_t actorAddress)
 		__FUNCTION__);
 }
 
+void resetRemoteAnimationDispatch(int playerNumber)
+{
+	std::unique_lock<std::shared_mutex> queueLock(queue_mutex);
+	queuedAnimations.erase(
+		std::remove_if(
+			queuedAnimations.begin(),
+			queuedAnimations.end(),
+			[playerNumber](const QueueAnimation& queued) {
+				return queued.playerNumber == playerNumber;
+			}),
+		queuedAnimations.end());
+	completedAnimations.erase(playerNumber);
+}
+
 void setupActor(PPCInterpreter_t* hCPU, TransferableData& trnsData, InstanceData& instData, uint32_t startRingBuffer, uint32_t endRingBuffer, uint64_t baseAddress) {
 	QueueActor qAct = queuedActors[0];
 
@@ -624,7 +638,10 @@ bool setupActorDelete(PPCInterpreter_t* hCPU, TransferableData& trnsData)
 	}
 
 	trnsData.f_r3 = static_cast<int>(queued.actorAddress);
-	trnsData.f_r4 = 0;
+	// The actor-interceptor patch reserves delete reason 0x7f for this direct
+	// refresh and bypasses its early deleteLater HLE callback. BOTW normalizes it
+	// to reason 0 and reports completion through the real ActorErase hook.
+	trnsData.f_r4 = 0x7f;
 	trnsData.f_r5 = 0;
 	trnsData.f_r6 = 0;
 	trnsData.f_r7 = 0;
@@ -632,7 +649,8 @@ bool setupActorDelete(PPCInterpreter_t* hCPU, TransferableData& trnsData)
 	trnsData.f_r9 = 0;
 	trnsData.f_r10 = 0;
 	hCPU->gpr[3] = queued.actorAddress;
-	for (int reg = 4; reg <= 10; ++reg)
+	hCPU->gpr[4] = 0x7f;
+	for (int reg = 5; reg <= 10; ++reg)
 		hCPU->gpr[reg] = 0;
 
 	// ksys::act::BaseProc::deleteLater(DeleteReason::_0). This is the same
@@ -903,6 +921,9 @@ void OnActorCreate(PPCInterpreter_t* hCPU)
 		player->second->InvalidateNativeAnimationControls();
 		player->second->setAddress(hCPU->gpr[3]);
 		player->second->SpawnPending.store(false, std::memory_order_release);
+		// A replacement may reuse the same guest address. Never let the previous
+		// actor's completed AS request suppress the first animation on this one.
+		resetRemoteAnimationDispatch(spawnedPlayer);
 		// The actor is about to receive the latest cached equipment. Clear the
 		// pre-spawn refresh first so any newer network update remains pending.
 		player->second->Equipment->MarkActorApplied();
@@ -1007,6 +1028,7 @@ void OnActorErase(PPCInterpreter_t* hCPU)
 			player->second->Status->set(0, __FUNCTION__);
 		player->second->SpawnPending.store(false, std::memory_order_release);
 		player->second->InvalidateNativeAnimationControls();
+		resetRemoteAnimationDispatch(spawnedPlayer);
 		player->second->setAddress(0);
 		std::stringstream stream;
 		stream << "Player " << spawnedPlayer << " erased.";
@@ -1308,7 +1330,10 @@ void init() {
 	osLib_registerHLEFunction("spawnactors", "fnCallMain", static_cast<void (*) (PPCInterpreter_t*)>(&mainFn));
 	osLib_registerHLEFunction("multiplayer", "WeatherSync", static_cast<void (*) (PPCInterpreter_t*)>(&WeatherFn));
 	osLib_registerHLEFunction("ukl_actorinterceptor", "OnActorCreate", static_cast<void (*) (PPCInterpreter_t*)>(&OnActorCreate));
-	osLib_registerHLEFunction("ukl_actorinterceptor", "OnActorDeleteLater", static_cast<void (*) (PPCInterpreter_t*)>(&OnActorErase));
+	// Clear native actor state only after BOTW actually erases the actor. The
+	// earlier deleteLater hook can run inside the shared PPC dispatcher and must
+	// not recursively mutate lifecycle state before that call returns.
+	osLib_registerHLEFunction("ukl_actorinterceptor", "OnActorErase", static_cast<void (*) (PPCInterpreter_t*)>(&OnActorErase));
 	osLib_registerHLEFunction("ukl_remotebombaiinterceptor", "OnCalc", &remoteBomb_onAICalc);
 	osLib_registerHLEFunction("ukl_timemgrinterceptor", "OnInit", &timemgr_OnInit);
 }
