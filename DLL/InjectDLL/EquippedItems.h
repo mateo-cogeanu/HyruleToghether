@@ -81,9 +81,7 @@ namespace DataTypes
 
 		CharacterEquipment getEquipment(const char* caller)
 		{
-			CharacterEquipment* Equipment = new CharacterEquipment();
-
-			Equipment->WType = 0;
+			CharacterEquipment Equipment{};
 
 			std::vector<std::string> AllEquipment = getAll(caller);
 
@@ -94,19 +92,19 @@ namespace DataTypes
 					int WeaponN = std::stoi(AllEquipment[i].substr(AllEquipment[i].size() - 3));
 
 					if (AllEquipment[i].rfind("Shield") != std::string::npos)
-						Equipment->Shield = WeaponN;
+						Equipment.Shield = WeaponN;
 					else if (AllEquipment[i].rfind("Bow") != std::string::npos)
-						Equipment->Bow = WeaponN;
+						Equipment.Bow = WeaponN;
 					else
 					{
 						if (AllEquipment[i].rfind("Sword") != std::string::npos)
-							Equipment->WType = 1;
+							Equipment.WType = 1;
 						else if (AllEquipment[i].rfind("Lsword") != std::string::npos)
-							Equipment->WType = 2;
+							Equipment.WType = 2;
 						else if (AllEquipment[i].rfind("Spear") != std::string::npos)
-							Equipment->WType = 3;
+							Equipment.WType = 3;
 
-						Equipment->Sword = WeaponN;
+						Equipment.Sword = WeaponN;
 					}
 
 					continue;
@@ -119,27 +117,27 @@ namespace DataTypes
 						int WeaponN = std::stoi(AllEquipment[i].substr(6, 3));
 
 						if (AllEquipment[i].rfind("Upper") != std::string::npos)
-							Equipment->Upper = WeaponN;
+							Equipment.Upper = WeaponN;
 						else if (AllEquipment[i].rfind("Lower") != std::string::npos)
-							Equipment->Lower = WeaponN;
+							Equipment.Lower = WeaponN;
 						else if (AllEquipment[i].rfind("Head") != std::string::npos)
-							Equipment->Head = WeaponN;
+							Equipment.Head = WeaponN;
 					}
 					catch (...)
 					{
 						if (AllEquipment[i].rfind("Upper") != std::string::npos)
-							Equipment->Upper = 0;
+							Equipment.Upper = 0;
 						else if (AllEquipment[i].rfind("Lower") != std::string::npos)
-							Equipment->Lower = 0;
+							Equipment.Lower = 0;
 						else if (AllEquipment[i].rfind("Head") != std::string::npos)
-							Equipment->Head = 0;
+							Equipment.Head = 0;
 					}
 
 					continue;
 				}
 			}
 
-			return *Equipment;
+			return Equipment;
 		}
 
 		std::vector<std::string> getAll(const char* caller)

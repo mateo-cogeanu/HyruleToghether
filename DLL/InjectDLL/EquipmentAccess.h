@@ -10,7 +10,7 @@ namespace DataTypes
 		bool Changed = false;
 		bool SetupFailed = false;
 		bool NeedsActorRefresh = false;
-		CharacterEquipment* LastKnown = new CharacterEquipment();
+		CharacterEquipment* LastKnown = new CharacterEquipment{};
 		std::string lastBase = "Jugador1ModelNameLongForASpecificReasonHead";
 
 		bool Compare(CharacterEquipment newEquipment)
@@ -70,11 +70,17 @@ namespace DataTypes
 			return true;
 		}
 
+		void MarkActorApplied()
+		{
+			std::unique_lock<std::shared_mutex> lock(Mutex);
+			NeedsActorRefresh = false;
+			Changed = false;
+		}
+
 		void SetWeapons(uint64_t baseAddr)
 		{
 			std::string RIGHT_DEFAULT = "RightHandWeaponLongName";
 			std::string LEFT_DEFAULT = "LeftHandWeaponLongName";
-			std::string BOW_DEFAULT = "BowWeaponLongName";
 
 			FindWeaponAddr(baseAddr);
 
@@ -84,7 +90,6 @@ namespace DataTypes
 
 			std::string RightHandWeapon = "Weapon_Null_";
 			std::string LeftHandWeapon = "Weapon_Shield_";
-			std::string BowWeapon = "Weapon_Bow_";
 
 			switch (LastKnown->WType)
 			{
@@ -98,18 +103,22 @@ namespace DataTypes
 				RightHandWeapon.replace(RightHandWeapon.find("Null"), 4, "Spear");
 				break;
 			}
+			// Jugador's GeneralParamList exposes exactly two actor equipment
+			// entries: Weapon_R and Weapon_L. When no melee weapon is equipped,
+			// Weapon_R is the valid slot for the equipped bow as well.
+			if (LastKnown->WType == 0 && LastKnown->Bow != 0)
+				RightHandWeapon = "Weapon_Bow_" + NumToStr(LastKnown->Bow);
+			else
+				RightHandWeapon += NumToStr(LastKnown->Sword);
+			LeftHandWeapon += NumToStr(LastKnown->Shield);
 
 			Mutex.lock();
 
-			Memory::write_string(WeaponAddrs.Right, RightHandWeapon + NumToStr(LastKnown->Sword), RIGHT_DEFAULT.size() + 8, __FUNCTION__);
-			Memory::write_string(WeaponAddrs.Left, LeftHandWeapon + NumToStr(LastKnown->Shield), LEFT_DEFAULT.size() + 8, __FUNCTION__);
-			if (WeaponAddrs.Bow != 0)
-				Memory::write_string(WeaponAddrs.Bow, BowWeapon + NumToStr(LastKnown->Bow), BOW_DEFAULT.size() + 8, __FUNCTION__);
+			Memory::write_string(WeaponAddrs.Right, RightHandWeapon, RIGHT_DEFAULT.size() + 8, __FUNCTION__);
+			Memory::write_string(WeaponAddrs.Left, LeftHandWeapon, LEFT_DEFAULT.size() + 8, __FUNCTION__);
 			Logging::LoggerService::LogInformation(
-				"Equipment setup: weapon=" + RightHandWeapon + NumToStr(LastKnown->Sword) +
-				", shield=" + LeftHandWeapon + NumToStr(LastKnown->Shield) +
-				", bow=" + BowWeapon + NumToStr(LastKnown->Bow) +
-				(WeaponAddrs.Bow == 0 ? " (bow slot unavailable)." : "."),
+				"Equipment setup: right=" + RightHandWeapon +
+				", left=" + LeftHandWeapon + ".",
 				__FUNCTION__);
 
 			if (OldAddress == ArmorAddrs.Face)
@@ -259,9 +268,6 @@ namespace DataTypes
 					addr = Memory::read_bigEndian4BytesOffset(temp + 0x4, __FUNCTION__);
 					this->WeaponAddrs.Right = Memory::read_bigEndian4BytesOffset(addr + 0x1C, __FUNCTION__) + Memory::getBaseAddress();
 					this->WeaponAddrs.Left = Memory::read_bigEndian4BytesOffset(addr + 0xA0, __FUNCTION__) + Memory::getBaseAddress();
-					uint32_t bowAddress = 0;
-					if (Memory::TryReadBigEndian4BytesOffset(addr + 0x124, bowAddress) && bowAddress != 0)
-						this->WeaponAddrs.Bow = bowAddress + Memory::getBaseAddress();
 				}
 
 				iterator++;
@@ -301,7 +307,6 @@ namespace DataTypes
 		{
 			uint64_t Left = 0;
 			uint64_t Right = 0;
-			uint64_t Bow = 0;
 		} WeaponAddrs;
 
 		struct ArmorAddr

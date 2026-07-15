@@ -903,6 +903,9 @@ void OnActorCreate(PPCInterpreter_t* hCPU)
 		player->second->InvalidateNativeAnimationControls();
 		player->second->setAddress(hCPU->gpr[3]);
 		player->second->SpawnPending.store(false, std::memory_order_release);
+		// The actor is about to receive the latest cached equipment. Clear the
+		// pre-spawn refresh first so any newer network update remains pending.
+		player->second->Equipment->MarkActorApplied();
 		player->second->Equipment->SetWeapons(hCPU->gpr[3]);
 		player->second->Equipment->SetArmor();
 		player->second->Bumii->setAddress(hCPU->gpr[3]);
