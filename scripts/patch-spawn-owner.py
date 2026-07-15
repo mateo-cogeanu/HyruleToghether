@@ -12,6 +12,59 @@ def replace_once(text: str, old: str, new: str, description: str) -> str:
     return text.replace(old, new, 1)
 
 
+def add_float_dispatch_arguments(text: str) -> str:
+    """Preserve and stage f1/f2 without changing the reversed native ABI."""
+    marker = "; MILKBAR_SHARED_FLOAT_ARGUMENTS"
+    if marker in text:
+        return text
+
+    text = replace_once(
+        text,
+        "startData: ; where our transferrable data starts",
+        f"{marker}\n"
+        "; Float arguments live immediately before startData, so the existing\n"
+        "; 48-byte native transfer structure and all of its offsets stay stable.\n"
+        "F_F2:\n.float -1.0\n"
+        "F_F1:\n.float -1.0\n\n"
+        "startData: ; where our transferrable data starts",
+        "float argument storage",
+    )
+    text = replace_once(text, "addi r1, r1, -0x30", "addi r1, r1, -0x40", "dispatch stack allocation")
+    text = replace_once(
+        text,
+        "mfctr r3\nstw r3, 44(r1)",
+        "mfctr r3\nstw r3, 44(r1)\n"
+        "stfd f1, 48(r1)\n"
+        "stfd f2, 56(r1)",
+        "dispatch float-register backup",
+    )
+    text = replace_once(
+        text,
+        "lis r10, F_R10@ha\n"
+        "lwz r10, F_R10@l(r10)\n\n"
+        "; Set up where to jump to...",
+        "lis r10, F_R10@ha\n"
+        "lwz r10, F_R10@l(r10)\n"
+        "lis r11, F_F1@ha\n"
+        "lfs f1, F_F1@l(r11)\n"
+        "lis r11, F_F2@ha\n"
+        "lfs f2, F_F2@l(r11)\n\n"
+        "; Set up where to jump to...",
+        "shared float argument loads",
+    )
+    text = replace_once(
+        text,
+        "lwz r12, 36(r1)\n\n"
+        "addi r1, r1, 0x30",
+        "lwz r12, 36(r1)\n"
+        "lfd f1, 48(r1)\n"
+        "lfd f2, 56(r1)\n\n"
+        "addi r1, r1, 0x40",
+        "dispatch float-register restore",
+    )
+    return text
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(f"Usage: {Path(sys.argv[0]).name} patch_SpawnActors.asm", file=sys.stderr)
@@ -78,6 +131,8 @@ def main() -> int:
     )
 
     if marker in text:
+        text = add_float_dispatch_arguments(text)
+        path.write_text(text, encoding="utf-8")
         return 0
 
     if shared_marker in text:
@@ -109,6 +164,7 @@ def main() -> int:
         )
         text = replace_once(text, old_clear, "", "non-atomic spawn-ready clear")
         text = replace_once(text, "restoreAndExit:\n", dispatch_complete + "restoreAndExit:\n", "dispatch completion target")
+        text = add_float_dispatch_arguments(text)
         path.write_text(text, encoding="utf-8")
         return 0
 
@@ -158,6 +214,7 @@ def main() -> int:
         )
         text = replace_once(text, old_clear, "", "non-atomic spawn-ready clear")
         text = replace_once(text, "restoreAndExit:\n", dispatch_complete + "restoreAndExit:\n", "dispatch completion target")
+        text = add_float_dispatch_arguments(text)
         path.write_text(text, encoding="utf-8")
         return 0
 
@@ -197,6 +254,7 @@ def main() -> int:
     )
     text = replace_once(text, old_clear, "", "non-atomic spawn-ready clear")
     text = replace_once(text, "restoreAndExit:\n", dispatch_complete + "restoreAndExit:\n", "dispatch completion target")
+    text = add_float_dispatch_arguments(text)
     path.write_text(text, encoding="utf-8")
     return 0
 

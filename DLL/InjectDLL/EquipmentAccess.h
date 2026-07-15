@@ -142,6 +142,7 @@ namespace DataTypes
 					lastBase = BaseToWrite;
 
 					this->SetupFailed = false;
+					this->Changed = false;
 					Logging::LoggerService::LogInformation("Armor setup.", __FUNCTION__);
 				}
 				catch (...)
@@ -189,6 +190,7 @@ namespace DataTypes
 					lastBase = splitModel[1];
 
 					this->SetupFailed = false;
+					this->Changed = false;
 					Logging::LoggerService::LogInformation("Model setup.", __FUNCTION__);
 				}
 				catch (...)

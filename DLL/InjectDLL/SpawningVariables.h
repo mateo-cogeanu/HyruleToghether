@@ -3,6 +3,7 @@
 #include <shared_mutex>
 #include <atomic>
 #include <mutex>
+#include <limits>
 #include "KeyCodeActor.h"
 #include "BotwEdit.h"
 #include <map>
@@ -108,6 +109,12 @@ static_assert(sizeof(InstanceData) == 256, "Spawn instance ring entry must remai
 		std::string Name;
 	};
 
+	extern struct QueueAnimation {
+		int playerNumber;
+		uint32_t actorAddress;
+		uint32_t animation;
+	};
+
 // ---------------------------------------------------------------------------------
 // This is an example function call.
 // - Feel free to expand / change -
@@ -125,9 +132,31 @@ uint64_t pending_spawn_sequence = 0;
 int last_observed_dispatch_state = -1;
 std::string pending_spawn_name;
 
+enum class PendingDispatchKind
+{
+	None,
+	Spawn,
+	Animation
+};
+
+PendingDispatchKind pending_dispatch_kind = PendingDispatchKind::None;
+int pending_animation_player = 0;
+uint32_t pending_animation_actor = 0;
+uint32_t pending_animation_hash = 0;
+
+struct CompletedAnimation
+{
+	uint32_t actorAddress;
+	uint32_t animation;
+};
+
+std::map<int, CompletedAnimation> completedAnimations;
+std::map<int, DWORD> lastAnimationPointerWarning;
+
 std::map<char, bool> prevKeyStateMap; // Used for key press logic - keeps track of previous key state
 
 std::vector<QueueActor> queuedActors;
+std::vector<QueueAnimation> queuedAnimations;
 
 // Setup raises every remote actor's delete flag before network data can enqueue
 // replacements. Keep actor callbacks in cleanup mode until the grace period is
@@ -174,6 +203,8 @@ void DespawnStalePlayerActors()
 			}),
 			queuedActors.end());
 		discardedRequests = previousSize - queuedActors.size();
+		queuedAnimations.clear();
+		completedAnimations.clear();
 	}
 	Logging::LoggerService::LogInformation(
 		"Despawning stale remote player actors before multiplayer synchronization; discarded " +
@@ -262,6 +293,33 @@ void queueActor(std::string actorName, float Position[3])
 
 	queuedActors.push_back(queueActor);
 
+}
+
+void queueRemoteAnimation(int playerNumber, uint64_t actorAddress, uint32_t animation)
+{
+	if (playerNumber < 1 || playerNumber > 32 || actorAddress == 0 ||
+		actorAddress > std::numeric_limits<uint32_t>::max())
+		return;
+
+	const uint32_t guestActorAddress = static_cast<uint32_t>(actorAddress);
+	std::unique_lock<std::shared_mutex> queueLock(queue_mutex);
+	const auto completed = completedAnimations.find(playerNumber);
+	if (completed != completedAnimations.end() &&
+		completed->second.actorAddress == guestActorAddress &&
+		completed->second.animation == animation)
+		return;
+
+	for (QueueAnimation& queued : queuedAnimations)
+	{
+		if (queued.playerNumber == playerNumber)
+		{
+			queued.actorAddress = guestActorAddress;
+			queued.animation = animation;
+			return;
+		}
+	}
+
+	queuedAnimations.push_back({playerNumber, guestActorAddress, animation});
 }
 
 void setupActor(PPCInterpreter_t* hCPU, TransferableData& trnsData, InstanceData& instData, uint32_t startRingBuffer, uint32_t endRingBuffer, uint64_t baseAddress) {
@@ -363,6 +421,7 @@ void setupActor(PPCInterpreter_t* hCPU, TransferableData& trnsData, InstanceData
 	trnsData.dispatchState = 1;
 	pending_spawn_sequence = ++spawn_request_sequence;
 	pending_spawn_name = qAct.Name;
+	pending_dispatch_kind = PendingDispatchKind::Spawn;
 	last_observed_dispatch_state = -1;
 
 	trnsData.enabled = true; // This tells the assembly patch to trigger one function call
@@ -394,6 +453,125 @@ trnsData.ringPtr = startRingBuffer; // move to the start!
 
 // Gotta remove this actor from the queue!
 queuedActors.erase(queuedActors.begin());
+}
+
+bool setupAnimation(PPCInterpreter_t* hCPU, TransferableData& trnsData,
+	uint32_t startTrnsData, uint32_t startRingBuffer, uint32_t endRingBuffer,
+	uint64_t baseAddress)
+{
+	const QueueAnimation queued = queuedAnimations.front();
+	const auto player = Instances::PlayerList.find(queued.playerNumber);
+	if (player == Instances::PlayerList.end() ||
+		player->second->baseAddr != queued.actorAddress)
+	{
+		queuedAnimations.erase(queuedAnimations.begin());
+		return false;
+	}
+
+	const auto completed = completedAnimations.find(queued.playerNumber);
+	if (completed != completedAnimations.end() &&
+		completed->second.actorAddress == queued.actorAddress &&
+		completed->second.animation == queued.animation)
+	{
+		queuedAnimations.erase(queuedAnimations.begin());
+		return false;
+	}
+
+	uint32_t animationController = 0;
+	std::string pointerFailure;
+	if (!Memory::TryReadBigEndian4BytesOffset(
+			static_cast<uint64_t>(queued.actorAddress) + 0x394,
+			animationController,
+			&pointerFailure) ||
+		animationController == 0)
+	{
+		const DWORD now = GetTickCount();
+		const auto previousWarning = lastAnimationPointerWarning.find(queued.playerNumber);
+		if (previousWarning == lastAnimationPointerWarning.end() ||
+			float(now - previousWarning->second) / 1000.0f >= 2.0f)
+		{
+			lastAnimationPointerWarning[queued.playerNumber] = now;
+			Logging::LoggerService::LogWarning(
+				"Player " + std::to_string(queued.playerNumber) +
+				" animation controller is not ready" +
+				(pointerFailure.empty() ? "." : ": " + pointerFailure + "."),
+				__FUNCTION__);
+		}
+		queuedAnimations.erase(queuedAnimations.begin());
+		return false;
+	}
+
+	const uint32_t stringLocation = static_cast<uint32_t>(trnsData.ringPtr);
+	const uint32_t safeStringLocation = stringLocation + 64;
+	const std::string animationName = "Anim_" + std::to_string(queued.animation);
+	if (animationName.size() + 1 > 64)
+	{
+		queuedAnimations.erase(queuedAnimations.begin());
+		return false;
+	}
+
+	{
+		std::unique_lock<std::shared_mutex> dataLock(data_mutex);
+		for (size_t i = 0; i < animationName.size(); ++i)
+			memInstance->memory_writeMemory(
+				stringLocation + static_cast<uint32_t>(i),
+				static_cast<byte>(animationName[i]),
+				baseAddress);
+		memInstance->memory_writeMemory(
+			stringLocation + static_cast<uint32_t>(animationName.size()),
+			static_cast<byte>(0),
+			baseAddress);
+
+		// Wii U sead::SafeString stores the guest C string followed by its
+		// vtable. EventHoverNullASPlayBase uses this exact vtable when it calls
+		// the live AS controller.
+		memInstance->memory_writeMemoryBE(safeStringLocation, stringLocation, baseAddress);
+		memInstance->memory_writeMemoryBE(safeStringLocation + 4, uint32_t(0x10263910), baseAddress);
+		memInstance->memory_writeMemoryBE(startTrnsData - 4, -1.0f, baseAddress);
+		memInstance->memory_writeMemoryBE(startTrnsData - 8, -1.0f, baseAddress);
+	}
+
+	trnsData.f_r3 = static_cast<int>(animationController);
+	trnsData.f_r4 = static_cast<int>(safeStringLocation);
+	trnsData.f_r5 = 0;
+	trnsData.f_r6 = 0;
+	trnsData.f_r7 = 1;
+	trnsData.f_r8 = 0;
+	trnsData.f_r9 = 0;
+	trnsData.f_r10 = 0;
+	hCPU->gpr[3] = animationController;
+	hCPU->gpr[4] = safeStringLocation;
+	hCPU->gpr[5] = 0;
+	hCPU->gpr[6] = 0;
+	hCPU->gpr[7] = 1;
+	hCPU->gpr[8] = 0;
+	hCPU->gpr[9] = 0;
+	hCPU->gpr[10] = 0;
+	hCPU->fpr[1].fpr = -1.0;
+	hCPU->fpr[2].fpr = -1.0;
+
+	trnsData.fnAddr = 0x0370dcf8;
+	trnsData.dispatchState = 1;
+	trnsData.enabled = true;
+	trnsData.interceptRegisters = false;
+	pending_spawn_sequence = ++spawn_request_sequence;
+	pending_spawn_name = animationName;
+	pending_dispatch_kind = PendingDispatchKind::Animation;
+	pending_animation_player = queued.playerNumber;
+	pending_animation_actor = queued.actorAddress;
+	pending_animation_hash = queued.animation;
+	last_observed_dispatch_state = -1;
+
+	Logging::LoggerService::LogDebug(
+		"Submitted direct AS animation " + animationName + " for player " +
+		std::to_string(queued.playerNumber) + ".",
+		__FUNCTION__);
+
+	trnsData.ringPtr += sizeof(InstanceData);
+	if (trnsData.ringPtr >= static_cast<int>(endRingBuffer))
+		trnsData.ringPtr = startRingBuffer;
+	queuedAnimations.erase(queuedAnimations.begin());
+	return true;
 }
 
 void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBuffer, uint32_t endRingBuffer, uint64_t baseAddress) {
@@ -440,19 +618,21 @@ void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBu
 	if (trnsData.enabled) {
 		if (trnsData.dispatchState != last_observed_dispatch_state) {
 			last_observed_dispatch_state = trnsData.dispatchState;
+			const std::string dispatchType =
+				pending_dispatch_kind == PendingDispatchKind::Animation ? "Animation" : "Spawn";
 			if (trnsData.dispatchState == 1) {
 				Logging::LoggerService::LogDebug(
-					"Spawn request " + std::to_string(pending_spawn_sequence) +
+					dispatchType + " request " + std::to_string(pending_spawn_sequence) +
 					" (" + pending_spawn_name + ") is PPC-visible and awaiting an atomic claim.",
 					__FUNCTION__);
 			} else if (trnsData.dispatchState == 2) {
 				Logging::LoggerService::LogDebug(
-					"Spawn request " + std::to_string(pending_spawn_sequence) +
+					dispatchType + " request " + std::to_string(pending_spawn_sequence) +
 					" (" + pending_spawn_name + ") was atomically claimed by a PPC wrapper.",
 					__FUNCTION__);
 			} else if (trnsData.dispatchState != 0) {
 				Logging::LoggerService::LogError(
-					"Spawn request " + std::to_string(pending_spawn_sequence) +
+					dispatchType + " request " + std::to_string(pending_spawn_sequence) +
 					" has invalid PPC dispatch state " + std::to_string(trnsData.dispatchState) + ".",
 					__FUNCTION__);
 			}
@@ -460,12 +640,25 @@ void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBu
 		return;
 	}
 	if (pending_spawn_sequence != 0) {
+		const std::string dispatchType =
+			pending_dispatch_kind == PendingDispatchKind::Animation ? "Animation" : "Spawn";
 		Logging::LoggerService::LogDebug(
-			"Spawn request " + std::to_string(pending_spawn_sequence) +
-			" (" + pending_spawn_name + ") returned from BOTW's actor factory.",
+			dispatchType + " request " + std::to_string(pending_spawn_sequence) +
+			" (" + pending_spawn_name + ") returned from BOTW.",
 			__FUNCTION__);
+		if (pending_dispatch_kind == PendingDispatchKind::Animation)
+		{
+			std::unique_lock<std::shared_mutex> queueLock(queue_mutex);
+			completedAnimations[pending_animation_player] = {
+				pending_animation_actor,
+				pending_animation_hash};
+		}
 		pending_spawn_sequence = 0;
 		pending_spawn_name.clear();
+		pending_dispatch_kind = PendingDispatchKind::None;
+		pending_animation_player = 0;
+		pending_animation_actor = 0;
+		pending_animation_hash = 0;
 		last_observed_dispatch_state = -1;
 	}
 	// No dispatch is pending, so natural actor-factory calls may refresh the
@@ -480,6 +673,15 @@ void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBu
 		memInstance->memory_readMemoryBE(static_cast<uint32_t>(trnsData.ringPtr), &instData, baseAddress);
 		data_mutex.unlock_shared();
 		setupActor(hCPU, trnsData, instData, startRingBuffer, endRingBuffer, baseAddress);
+	}
+	else if (!queuedAnimations.empty()) {
+		setupAnimation(
+			hCPU,
+			trnsData,
+			startTrnsData,
+			startRingBuffer,
+			endRingBuffer,
+			baseAddress);
 	}
 	queue_mutex.unlock(); //========================================
 

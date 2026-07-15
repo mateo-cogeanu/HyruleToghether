@@ -10,6 +10,8 @@
 #include "LocalInstance.h"
 #include "Vec3f_Operations.h"
 
+void queueRemoteAnimation(int playerNumber, uint64_t actorAddress, uint32_t animation);
+
 namespace MemoryAccess
 {
 	class Player : public Actor
@@ -160,6 +162,14 @@ namespace MemoryAccess
 
 			if (this->baseAddr == 0)
 				return;
+
+			// Jugador's per-frame EventFlow is not scheduled by the generated NPC
+			// actor on native Cemu. Submit the received AS name to the actor's live
+			// animation controller through the PPC dispatch hook instead.
+			queueRemoteAnimation(
+				PlayerNumber,
+				baseAddr,
+				static_cast<uint32_t>(PlayerData->Animation));
 
 			/* Attack detection
 			Animations stored in AttackAnimations are the animations we have identified as attack such as Sword_Attack_S1

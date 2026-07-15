@@ -128,6 +128,13 @@ All notable changes made while turning the original Windows-only Milk Bar Launch
 
 ### Player model and game-data preparation
 
+- Fixed persistent remote-player T-posing on native Cemu. The generated NPC's
+  per-frame EventFlow was never scheduled, so valid synchronized animation
+  strings could not reach the actor. The client now dispatches `Anim_<hash>`
+  directly to the live Wii U AS controller through the existing atomic PPC
+  function-call bridge, including the required floating-point arguments, while
+  coalescing unchanged network updates. Equipment changes and setup retries now
+  update the existing actor instead of deleting and duplicating it.
 - Bundled a target-native model-builder utility.
 - Added automatic creation and validation of the remote-player BFRES model assets.
 - Added automatic UKMM merge against the user's own decrypted base game, update, and DLC files.

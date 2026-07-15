@@ -117,6 +117,7 @@ void Player::PThread()
 	DWORD LastSpawn = 0;
 	const int SPAWN_LIMITER = 3;
 	bool failedToDelete = false;
+	DWORD LastEquipmentRetry = 0;
 
 	std::stringstream startStream;
 	startStream << "Player " << this->PlayerNumber << " thread starting...";
@@ -155,16 +156,19 @@ void Player::PThread()
 
 			bool exists = this->baseAddr != 0;
 
-			if (this->Equipment->Changed)
+			// Equipment strings are applied to the existing actor. Recreating it
+			// here depended on a dead delete EventFlow, produced duplicate actors,
+			// and discarded the live animation controller we need to drive.
+			if (exists && this->Equipment->SetupFailed &&
+				(LastEquipmentRetry == 0 ||
+				 float(GetTickCount() - LastEquipmentRetry) / 1000.0f >= 1.0f))
 			{
-				action = ActCreate;
-				reasonToSpawn = "Equipment changed. ";
-			}
-
-			if (this->Equipment->SetupFailed)
-			{
-				action = ActCreate;
-				reasonToSpawn += "Failed to setup armor. ";
+				LastEquipmentRetry = GetTickCount();
+				this->Equipment->SetWeapons(this->baseAddr);
+				if (this->Model.ModelType == 0)
+					this->Equipment->SetArmor();
+				else if (this->Model.ModelType == 1)
+					this->Equipment->SetModel(this->Model.Model);
 			}
 
 			if (failedToDelete)
