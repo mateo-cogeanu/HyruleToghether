@@ -149,6 +149,8 @@ PendingDispatchKind pending_dispatch_kind = PendingDispatchKind::None;
 int pending_animation_player = 0;
 uint32_t pending_animation_actor = 0;
 uint32_t pending_animation_hash = 0;
+int pending_delete_player = 0;
+uint32_t pending_delete_actor = 0;
 
 struct CompletedAnimation
 {
@@ -663,6 +665,8 @@ bool setupActorDelete(PPCInterpreter_t* hCPU, TransferableData& trnsData)
 	pending_spawn_sequence = ++spawn_request_sequence;
 	pending_spawn_name = "Jugador" + std::to_string(queued.playerNumber);
 	pending_dispatch_kind = PendingDispatchKind::ActorDelete;
+	pending_delete_player = queued.playerNumber;
+	pending_delete_actor = queued.actorAddress;
 	last_observed_dispatch_state = -1;
 
 	Logging::LoggerService::LogDebug(
@@ -754,12 +758,36 @@ void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBu
 				pending_animation_actor,
 				pending_animation_hash};
 		}
+		else if (pending_dispatch_kind == PendingDispatchKind::ActorDelete)
+		{
+			// deleteLater has returned to the wrapper, so the old actor must no
+			// longer block its replacement. The real erase hook is asynchronous and
+			// is not emitted by every native Cemu build; finalize our host-side
+			// lifecycle here as well. If OnActorErase already ran, the address check
+			// makes this a no-op.
+			const auto player = Instances::PlayerList.find(pending_delete_player);
+			if (player != Instances::PlayerList.end() &&
+				player->second->baseAddr == pending_delete_actor)
+			{
+				player->second->SpawnPending.store(false, std::memory_order_release);
+				player->second->InvalidateNativeAnimationControls();
+				resetRemoteAnimationDispatch(pending_delete_player);
+				player->second->setAddress(0);
+				Logging::LoggerService::LogDebug(
+					"Equipment refresh delete completed for player " +
+					std::to_string(pending_delete_player) +
+					"; replacement spawn enabled.",
+					__FUNCTION__);
+			}
+		}
 		pending_spawn_sequence = 0;
 		pending_spawn_name.clear();
 		pending_dispatch_kind = PendingDispatchKind::None;
 		pending_animation_player = 0;
 		pending_animation_actor = 0;
 		pending_animation_hash = 0;
+		pending_delete_player = 0;
+		pending_delete_actor = 0;
 		last_observed_dispatch_state = -1;
 	}
 	// No dispatch is pending, so natural actor-factory calls may refresh the
@@ -1018,8 +1046,20 @@ void OnActorErase(PPCInterpreter_t* hCPU)
 		auto player = Instances::PlayerList.find(spawnedPlayer);
 		if (player == Instances::PlayerList.end())
 			return;
+		const bool cleanupActive = stalePlayerCleanupActive.load(std::memory_order_acquire);
+		// A direct refresh can complete host-side before Cemu emits its delayed
+		// erase callback. Never let that stale callback clear a replacement actor
+		// that has already been adopted for the same player slot.
+		if (!cleanupActive && player->second->baseAddr != hCPU->gpr[3])
+		{
+			std::stringstream staleEraseStream;
+			staleEraseStream << "Ignored stale erase callback for player " << spawnedPlayer
+				<< " at guest address 0x" << std::hex << hCPU->gpr[3] << ".";
+			Logging::LoggerService::LogDebug(staleEraseStream.str(), __FUNCTION__);
+			return;
+		}
 		//Instances::PlayerList[spawnedPlayer]->Delete->set(false, __FUNCTION__);
-		if (stalePlayerCleanupActive.load(std::memory_order_acquire))
+		if (cleanupActive)
 		{
 			player->second->Status->set(MemoryAccess::Player::DELETE_STATUS, __FUNCTION__);
 			stalePlayerEraseCount.fetch_add(1, std::memory_order_relaxed);

@@ -161,6 +161,11 @@ namespace MemoryAccess
 			}
 #endif
 
+			// Cache equipment even before the native actor exists. OnActorCreate uses
+			// this snapshot while constructing the actor, so its first visible frame
+			// already has the remote player's current armor and weapons.
+			const bool equipmentChanged = Equipment->Compare(PlayerData->Equipment);
+
 			if (this->baseAddr == 0)
 				return;
 
@@ -249,7 +254,6 @@ namespace MemoryAccess
 
 			if (HoldAddr != 0)
 				Memory::write_string(HoldAddr, PlayerData->IsEquipped ? "Hold" : "Equip", 6, __FUNCTION__);
-			const bool equipmentChanged = Equipment->Compare(PlayerData->Equipment);
 			if (equipmentChanged && this->baseAddr != 0)
 			{
 				this->Equipment->SetWeapons(this->baseAddr);

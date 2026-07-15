@@ -77,6 +77,7 @@ All notable changes made while turning the original Windows-only Milk Bar Launch
 
 ### Cross-platform native client
 
+- Prevented remote players from flashing in a T-pose and then disappearing during equipment synchronization. The client now caches armor and weapon data before the actor's first spawn, deterministically enables its replacement when a direct refresh deletion returns even on native Cemu builds that omit the asynchronous actor-erase callback, and prevents a delayed stale erase callback from clearing the replacement actor.
 - Fixed the remaining native-Cemu remote-player T-pose race. The client now stages the latest normal animation before actor creation, and the generated multiplayer EventFlow no longer permanently suppresses `Demo_PlayASForDemo` after an initial placeholder request; all 32 player actions retry each frame until the live `Anim_<hash>` control is consumed.
 - Fixed persistent remote-player T-poses on native macOS Cemu. The client now finds Cemu's deserialized live EventFlow parameter block instead of writing animation names into the inactive loaded-archive copy, derives already-replaced normal-animation controls from intact attack/equipment anchors, and refreshes those addresses whenever a remote actor is recreated.
 - Prevented duplicate remote actors when Cemu's asynchronous spawn callback takes longer than the old three-second retry interval. A spawn remains pending until its callback arrives or a bounded timeout permits one retry.
