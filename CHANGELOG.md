@@ -77,6 +77,7 @@ All notable changes made while turning the original Windows-only Milk Bar Launch
 
 ### Cross-platform native client
 
+- Verified the custom actor's animation route end to end through its assets: the mutable controls are EventFlow `ASName` parameter buffers, normal hashes resolve through the 1,292-entry `MultiplayerAS` list, and attack hashes resolve through `MultiplayerAI`. The scanner now rejects any address that does not still contain the exact per-player EventFlow control name, logs the resolved player-1 buffers, and verifies/logs the first normal and attack write readback with signed and unsigned hashes, status, and address.
 - Added a CMake build for the injected/native multiplayer client, producing `.dylib` on macOS and `.so` on Linux.
 - Closed a title-shutdown lifetime hole exposed by the macOS log. When Cemu marks BOTW inactive, remote-player workers now observe the title signal themselves, leave deletion/spawn waits, are joined without writing despawn state into invalidating game memory, and clear only their host-side pointers before the server loop returns. The delayed connection-message worker now obeys the same title lifetime.
 - Removed the disproven direct `GameROMPlayer` animation pointer-chain fallback. The custom `Jugador` NPC actor never creates that internal Link component, so retrying its null third link could not animate the remote model and exposed Linux to invalid pointer assumptions. Remote animation now uses the actor's designed `Anim_<hash>` and `Attack_<hash>` GameData/EventFlow controls exclusively.
@@ -127,6 +128,7 @@ All notable changes made while turning the original Windows-only Milk Bar Launch
 - Added automatic creation and validation of the remote-player BFRES model assets.
 - Added automatic UKMM merge against the user's own decrypted base game, update, and DLC files.
 - Fixed UKMM's incremental deployment leaving an older `TitleBG.pack` in Cemu after producing a correct final merge. The launcher now replaces the deployed content and DLC trees from UKMM's completed merged storage, validates that the required hold, animation, and attack controls are present, and versions this deployment behavior so existing installations rebuild automatically on both macOS and Linux.
+- Made the deployment marker self-healing: even when its signature matches, the launcher now rebuilds instead of launching if the active Cemu graphic-pack `TitleBG.pack` is missing any multiplayer animation control. Removed the model builder's post-merge replacement of that archive with the vanilla file, and added a final authoritative copy and validation after model generation so the active pack retains the EventFlow controls.
 - Added validation that required model and animation files were produced before launch.
 - Added automatic installation and enablement of the generated Cemu graphic pack.
 - Added a belt-lookup guard patch to avoid invalid equipment/model lookup crashes.

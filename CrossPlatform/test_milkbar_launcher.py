@@ -70,6 +70,35 @@ class CemuGraphicPackSettingsTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "animation controls"):
                 launcher._deploy_final_ukmm_merge(root / "merged", root / "output")
 
+    def test_file_contains_all_requires_every_control(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            title = Path(temp) / "TitleBG.pack"
+            title.write_bytes(b"Jugador1_Hold\0Jugador1_animationthing")
+
+            self.assertFalse(
+                launcher._file_contains_all(title, launcher.REQUIRED_MULTIPLAYER_GAME_DATA)
+            )
+
+            with title.open("ab") as output:
+                output.write(b"\0Jugador1_AttackAnimation")
+            self.assertTrue(
+                launcher._file_contains_all(title, launcher.REQUIRED_MULTIPLAYER_GAME_DATA)
+            )
+
+    def test_restore_multiplayer_title_bg_replaces_postprocessed_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "merged/content/Pack/TitleBG.pack"
+            destination = root / "output/content/Pack/TitleBG.pack"
+            source.parent.mkdir(parents=True)
+            destination.parent.mkdir(parents=True)
+            source.write_bytes(b"\0".join(launcher.REQUIRED_MULTIPLAYER_GAME_DATA))
+            destination.write_bytes(b"vanilla title archive")
+
+            launcher._restore_multiplayer_title_bg(root / "merged", root / "output")
+
+            self.assertEqual(destination.read_bytes(), source.read_bytes())
+
 
 if __name__ == "__main__":
     unittest.main()

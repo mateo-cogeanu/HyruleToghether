@@ -446,6 +446,22 @@ def _deploy_final_ukmm_merge(merged_root: Path, output_pack: Path) -> None:
         )
 
 
+def _restore_multiplayer_title_bg(merged_root: Path, output_pack: Path) -> None:
+    """Keep the final UKMM EventFlow archive authoritative after post-processing."""
+    source = merged_root / "content" / "Pack" / "TitleBG.pack"
+    destination = output_pack / "content" / "Pack" / "TitleBG.pack"
+    if not _file_contains_all(source, REQUIRED_MULTIPLAYER_GAME_DATA):
+        raise RuntimeError(
+            "UKMM's final TitleBG.pack is missing Hyrule Together's animation controls"
+        )
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+    if not _file_contains_all(destination, REQUIRED_MULTIPLAYER_GAME_DATA):
+        raise RuntimeError(
+            "The deployed TitleBG.pack is missing Hyrule Together's animation controls"
+        )
+
+
 def install_bundled_mod(config: dict[str, Any], force: bool = False) -> Path:
     source_tool = bundled_ukmm_executable()
     archive = bundled_mod_archive()
@@ -480,9 +496,11 @@ def install_bundled_mod(config: dict[str, Any], force: bool = False) -> Path:
     output_pack = graphics / "BreathOfTheWild_UKMM"
     marker = output_pack / ".milkbar-signature"
     if not force and marker.is_file() and marker.read_text(encoding="utf-8").strip() == signature:
-        _require_extended_memory_pack(cemu_root / "config")
-        _configure_cemu_settings(cemu_root / "config")
-        return output_pack
+        active_title_bg = output_pack / "content" / "Pack" / "TitleBG.pack"
+        if _file_contains_all(active_title_bg, REQUIRED_MULTIPLAYER_GAME_DATA):
+            _require_extended_memory_pack(cemu_root / "config")
+            _configure_cemu_settings(cemu_root / "config")
+            return output_pack
 
     ukmm_root = cemu_root / "ukmm"
     local_tool = ukmm_root / "ukmm"
@@ -552,6 +570,10 @@ def install_bundled_mod(config: dict[str, Any], force: bool = False) -> Path:
     animation_path = output_pack / "content" / "Model" / "Player_Animation_NoFace.sbfres"
     if not animation_path.is_file() or animation_path.stat().st_size < 1024:
         raise RuntimeError("Hyrule Together player model creation did not produce Player_Animation_NoFace.sbfres")
+    _restore_multiplayer_title_bg(
+        ukmm_root / "storage" / "wiiu" / "profiles" / "Default" / "merged",
+        output_pack,
+    )
     for patch in patches:
         shutil.copy2(patch, output_pack / patch.name)
     marker.write_text(signature, encoding="utf-8")

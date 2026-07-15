@@ -24,7 +24,9 @@ namespace MemoryAccess
 		DWORD LastAttack = 0;
 		int LastAnimation = 0;
 		bool LowLatency = false;
-		bool AnimationSyncLogged = false;
+		bool NormalAnimationSyncLogged = false;
+		bool AttackAnimationSyncLogged = false;
+		bool AnimationSyncFailureLogged = false;
 		int ChargeAttackRetries = 0;
 
 		Vec3f Speed = Vec3f(0, 0, 0);
@@ -167,7 +169,7 @@ namespace MemoryAccess
 					{
 						const std::string control = "Attack_" + std::to_string(UINT32(PlayerData->Animation));
 						Memory::write_string(AttackAddr, control, DEFAULT_ATTACK.size(), __FUNCTION__);
-						LogAnimationSyncOnce(control);
+						LogAnimationSyncOnce(control, PlayerData->Animation, AttackAddr, 2, true);
 					}
 				}
 				else
@@ -177,7 +179,7 @@ namespace MemoryAccess
 					{
 						const std::string control = "Anim_" + std::to_string(UINT32(PlayerData->Animation));
 						Memory::write_string(AnimAddr, control, DEFAULT_ANIM.size(), __FUNCTION__);
-						LogAnimationSyncOnce(control);
+						LogAnimationSyncOnce(control, PlayerData->Animation, AnimAddr, 0, false);
 					}
 				}
 			}
@@ -345,14 +347,35 @@ namespace MemoryAccess
 	private:
 		void PThread();
 
-		void LogAnimationSyncOnce(const std::string& control)
+		void LogAnimationSyncOnce(const std::string& control, int animation, uint64_t address,
+			int status, bool attack)
 		{
-			if (AnimationSyncLogged)
+			bool& successLogged = attack ? AttackAnimationSyncLogged : NormalAnimationSyncLogged;
+			if (successLogged)
 				return;
-			Logging::LoggerService::LogInformation(
-				"Applied remote animation control for player " + std::to_string(PlayerNumber) +
-				": " + control + ".", __FUNCTION__);
-			AnimationSyncLogged = true;
+
+			const std::string readback = Memory::read_string(address, control.size() + 1, __FUNCTION__);
+			if (readback != control)
+			{
+				if (!AnimationSyncFailureLogged)
+				{
+					Logging::LoggerService::LogError(
+						"Remote animation EventFlow write verification failed for player " +
+						std::to_string(PlayerNumber) + ": expected " + control + ", read back " +
+						readback + ".", __FUNCTION__);
+					AnimationSyncFailureLogged = true;
+				}
+				return;
+			}
+
+			std::stringstream stream;
+			stream << "Applied remote animation control for player " << PlayerNumber << ": " << control
+				<< "; type=" << (attack ? "attack" : "normal") << ", signed hash=" << animation
+				<< ", unsigned hash=" << static_cast<uint32_t>(animation) << ", status=" << status
+				<< ", readback=" << readback << ", address=0x"
+				<< std::hex << address << ".";
+			Logging::LoggerService::LogInformation(stream.str(), __FUNCTION__);
+			successLogged = true;
 		}
 
 		void ManageBomb(Vec3f BombData, int bomb)

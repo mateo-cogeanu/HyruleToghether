@@ -443,8 +443,29 @@ namespace MemoryAccess
 				}
 			}
 
+			for (int i = 1; i < 33; i++)
+			{
+				const std::string normalControl = "Jugador" + std::to_string(i) + "_animationthing";
+				const std::string attackControl = "Jugador" + std::to_string(i) + "_AttackAnimation";
+				if (result[i].AnimationFlag == 0 ||
+					Memory::read_string(result[i].AnimationFlag, normalControl.size(), __FUNCTION__) != normalControl ||
+					result[i].AttackAnimation == 0 ||
+					Memory::read_string(result[i].AttackAnimation, attackControl.size(), __FUNCTION__) != attackControl)
+				{
+					Logging::LoggerService::LogError(
+						"Remote animation scan resolved an unexpected EventFlow parameter buffer for player " +
+						std::to_string(i) + ".", __FUNCTION__);
+					throw errorMessage;
+				}
+			}
+
 			Logging::LoggerService::LogInformation(
 				"Scanned remote animation controls successfully.", __FUNCTION__);
+			std::stringstream animationAddresses;
+			animationAddresses << "Resolved player 1 EventFlow animation buffers: normal=0x" << std::hex
+				<< result[1].AnimationFlag << ", attack=0x" << result[1].AttackAnimation
+				<< ", hold=0x" << result[1].HoldFlag << ".";
+			Logging::LoggerService::LogInformation(animationAddresses.str(), __FUNCTION__);
 
 			sig = { 0x06, 0x46, 0x40, 0xD2, 0x00, 0x45, 0x12, 0x98 };
 			addr = Memory::PatternScan(sig, Memory::getBaseAddress(), 8) + 0x1;

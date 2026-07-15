@@ -86,13 +86,13 @@ static void BuildModels(string baseContent, string updateContent, string outputC
     SaveCompressed(outputTex2, Path.Combine(modelDirectory, $"{ModelName}.Tex2.sbfres"));
 
     BuildNoFaceAnimations(baseContent, modelDirectory);
-    RestoreLocalLinkActors(baseContent, updateContent, outputContent, title);
+    RestoreLocalLinkActors(baseContent, updateContent, outputContent);
 
     Console.WriteLine($"Created {ModelName} with {outputModel.Models.Count} models, " +
                       $"{outputTex1.Textures.Count} Tex1 textures and {outputTex2.Textures.Count} Tex2 textures.");
 }
 
-static void RestoreLocalLinkActors(string baseContent, string updateContent, string outputContent, byte[] vanillaTitle)
+static void RestoreLocalLinkActors(string baseContent, string updateContent, string outputContent)
 {
     string outputActors = Path.Combine(outputContent, "Actor", "Pack");
     foreach (string outputPath in Directory.EnumerateFiles(outputActors, "Armor_*.sbactorpack"))
@@ -111,13 +111,6 @@ static void RestoreLocalLinkActors(string baseContent, string updateContent, str
     string? pauseSource = File.Exists(updatePause) ? updatePause : (File.Exists(basePause) ? basePause : null);
     if (File.Exists(outputPause) && pauseSource is not null)
         File.Copy(pauseSource, outputPause, true);
-
-    // TitleBG.pack is loaded before the gameplay actor packs. Rebuilding this
-    // SARC changed layout details that BOTW relies on and caused a deterministic
-    // null access in the BFRES loader on current Cemu. The title screen does not
-    // need multiplayer actors, so preserve Nintendo's archive byte-for-byte.
-    string outputTitle = Path.Combine(outputContent, "Pack", "TitleBG.pack");
-    File.WriteAllBytes(outputTitle, vanillaTitle);
 }
 
 static void BuildNoFaceAnimations(string baseContent, string modelDirectory)
