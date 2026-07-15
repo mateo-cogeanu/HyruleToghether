@@ -443,6 +443,9 @@ namespace MemoryAccess
 				}
 			}
 
+			Logging::LoggerService::LogInformation(
+				"Scanned remote animation controls successfully.", __FUNCTION__);
+
 			sig = { 0x06, 0x46, 0x40, 0xD2, 0x00, 0x45, 0x12, 0x98 };
 			addr = Memory::PatternScan(sig, Memory::getBaseAddress(), 8) + 0x1;
 

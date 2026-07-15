@@ -1,8 +1,6 @@
 #pragma once
 
 #include <atomic>
-#include <limits>
-#include <mutex>
 
 #include "Actor.h"
 #include "EquipmentAccess.h"
@@ -26,7 +24,7 @@ namespace MemoryAccess
 		DWORD LastAttack = 0;
 		int LastAnimation = 0;
 		bool LowLatency = false;
-		BigEndian<int>* AnimationState = new BigEndian<int>();
+		bool AnimationSyncLogged = false;
 		int ChargeAttackRetries = 0;
 
 		Vec3f Speed = Vec3f(0, 0, 0);
@@ -83,19 +81,7 @@ namespace MemoryAccess
 
 		void setAddress(uint64_t addr)
 		{
-			std::unique_lock<std::shared_mutex> lock(Mutex);
 			Actor::setAddress(addr);
-			delete AnimationState;
-			AnimationState = nullptr;
-			AnimationApplied = false;
-			AnimationWaitLogged = false;
-			LastAnimationResolveAttempt = 0;
-
-			// Actor creation is reported before every internal component has
-			// necessarily finished initializing. Try immediately, then let set()
-			// retry without treating a temporarily incomplete pointer chain as a
-			// fatal actor setup failure.
-			ResolveAnimationStateLocked();
 		}
 
 		void set(DTO::CloseCharacterDTO* PlayerData, bool DispNames, bool isPaused)
@@ -117,15 +103,8 @@ namespace MemoryAccess
 			if (this->baseAddr == 0)
 				return;
 
-			// Updated can be false while the actor's internal animation component
-			// is still coming online. Keep resolving against the latest received
-			// hash so a one-time creation race cannot disable animation forever.
 			if (!PlayerData->Updated)
-			{
-				if (!isPaused)
-					ApplyAnimation(PlayerData->Animation);
 				return;
-			}
 
 			const std::string DEFAULT_ANIM = "Jugador" + std::to_string(PlayerNumber) + "_animationthing";
 			const std::string DEFAULT_ATTACK = "Jugador32_AttackAnimation";
@@ -185,17 +164,24 @@ namespace MemoryAccess
 				{
 					this->Status->set(2, __FUNCTION__);
 					if (AttackAddr != 0)
-						Memory::write_string(AttackAddr, "Attack_" + std::to_string(UINT32(PlayerData->Animation)), DEFAULT_ATTACK.size(), __FUNCTION__);
+					{
+						const std::string control = "Attack_" + std::to_string(UINT32(PlayerData->Animation));
+						Memory::write_string(AttackAddr, control, DEFAULT_ATTACK.size(), __FUNCTION__);
+						LogAnimationSyncOnce(control);
+					}
 				}
 				else
 				{
 					this->Status->set(0, __FUNCTION__);
 					if (AnimAddr != 0)
-						Memory::write_string(AnimAddr, "Anim_" + std::to_string(UINT32(PlayerData->Animation)), DEFAULT_ANIM.size(), __FUNCTION__);
+					{
+						const std::string control = "Anim_" + std::to_string(UINT32(PlayerData->Animation));
+						Memory::write_string(AnimAddr, control, DEFAULT_ANIM.size(), __FUNCTION__);
+						LogAnimationSyncOnce(control);
+					}
 				}
 			}
 			
-			ApplyAnimation(PlayerData->Animation);
 			LastAnimation = PlayerData->Animation;
 
 			if (HoldAddr != 0)
@@ -357,77 +343,16 @@ namespace MemoryAccess
 		}
 
 	private:
-		std::shared_mutex Mutex;
-		DWORD LastAnimationResolveAttempt = 0;
-		int LastAppliedAnimation = 0;
-		bool AnimationApplied = false;
-		bool AnimationWaitLogged = false;
-		static constexpr DWORD ANIMATION_RESOLVE_RETRY_MS = 250;
-
 		void PThread();
 
-		bool ResolveAnimationStateLocked()
+		void LogAnimationSyncOnce(const std::string& control)
 		{
-			if (this->baseAddr == 0)
-				return false;
-
-			const DWORD now = GetTickCount();
-			if (LastAnimationResolveAttempt != 0 &&
-				static_cast<DWORD>(now - LastAnimationResolveAttempt) < ANIMATION_RESOLVE_RETRY_MS)
-				return false;
-			LastAnimationResolveAttempt = now;
-
-			uint64_t animationRoot = 0;
-			std::string failureReason;
-			const bool resolved = Memory::TryReadPointers(
-				this->baseAddr, { 0x448, 0x4C, 0x10, 0x19C, 0x38, 0xA0, 0x10, -0x5C },
-				animationRoot, false, &failureReason);
-			constexpr uint64_t ANIMATION_STATE_OFFSET = 0x10;
-			uint32_t currentAnimation = 0;
-			bool animationReadable = false;
-			if (resolved)
-			{
-				if (animationRoot > std::numeric_limits<uint32_t>::max() - ANIMATION_STATE_OFFSET)
-					failureReason = "animation-state offset exceeds the 32-bit PPC address space";
-				else
-					animationReadable = Memory::TryReadBigEndian4BytesOffset(
-						animationRoot + ANIMATION_STATE_OFFSET, currentAnimation, &failureReason);
-			}
-			if (!animationReadable)
-			{
-				if (!AnimationWaitLogged)
-				{
-					Logging::LoggerService::LogWarning(
-						"Remote animation state is not ready (" + failureReason +
-						"); retrying while position synchronization continues.",
-						"Player::ResolveAnimationState");
-					AnimationWaitLogged = true;
-				}
-				return false;
-			}
-
-			const uint64_t animationAddress = Memory::getBaseAddress() + animationRoot + ANIMATION_STATE_OFFSET;
-			AnimationState = new BigEndian<int>(animationAddress, "Player::ResolveAnimationState");
-			AnimationApplied = false;
-			std::stringstream stream;
-			stream << "Remote animation synchronization ready for player " << PlayerNumber
-				<< " at 0x" << std::hex << animationAddress << ".";
-			Logging::LoggerService::LogInformation(stream.str(), "Player::ResolveAnimationState");
-			return true;
-		}
-
-		void ApplyAnimation(int animation)
-		{
-			std::unique_lock<std::shared_mutex> lock(Mutex);
-			if (AnimationState == nullptr && !ResolveAnimationStateLocked())
+			if (AnimationSyncLogged)
 				return;
-
-			if (!AnimationApplied || animation != LastAppliedAnimation)
-			{
-				AnimationState->set(animation, __FUNCTION__);
-				LastAppliedAnimation = animation;
-				AnimationApplied = true;
-			}
+			Logging::LoggerService::LogInformation(
+				"Applied remote animation control for player " + std::to_string(PlayerNumber) +
+				": " + control + ".", __FUNCTION__);
+			AnimationSyncLogged = true;
 		}
 
 		void ManageBomb(Vec3f BombData, int bomb)

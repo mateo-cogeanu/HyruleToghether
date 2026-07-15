@@ -26,6 +26,13 @@ CEMU_RUNTIMES = {
     "Linux_arm64": "Linux arm64",
 }
 
+UKMM_DEPLOYMENT_SCHEMA = b"authoritative-final-merge-v1"
+REQUIRED_MULTIPLAYER_GAME_DATA = (
+    b"Jugador1_Hold",
+    b"Jugador1_animationthing",
+    b"Jugador1_AttackAnimation",
+)
+
 
 def data_directory() -> Path:
     override = os.environ.get("MILKBAR_DATA_DIR")
@@ -403,6 +410,42 @@ def _require_extended_memory_pack(directory: Path) -> None:
         )
 
 
+def _file_contains_all(path: Path, needles: tuple[bytes, ...]) -> bool:
+    if not path.is_file() or not needles:
+        return False
+    longest = max(map(len, needles))
+    missing = set(needles)
+    overlap = b""
+    with path.open("rb") as source:
+        while chunk := source.read(1024 * 1024):
+            block = overlap + chunk
+            missing = {needle for needle in missing if needle not in block}
+            if not missing:
+                return True
+            overlap = block[-(longest - 1):] if longest > 1 else b""
+    return False
+
+
+def _deploy_final_ukmm_merge(merged_root: Path, output_pack: Path) -> None:
+    """Replace UKMM's incremental output with its completed merged trees."""
+    merged_content = merged_root / "content"
+    if not merged_content.is_dir():
+        raise RuntimeError("UKMM completed without producing its final merged content")
+
+    for name in ("content", "aoc"):
+        source = merged_root / name
+        destination = output_pack / name
+        shutil.rmtree(destination, ignore_errors=True)
+        if source.is_dir():
+            shutil.copytree(source, destination)
+
+    title_bg = output_pack / "content" / "Pack" / "TitleBG.pack"
+    if not _file_contains_all(title_bg, REQUIRED_MULTIPLAYER_GAME_DATA):
+        raise RuntimeError(
+            "UKMM's final TitleBG.pack is missing Hyrule Together's animation controls"
+        )
+
+
 def install_bundled_mod(config: dict[str, Any], force: bool = False) -> Path:
     source_tool = bundled_ukmm_executable()
     archive = bundled_mod_archive()
@@ -426,7 +469,7 @@ def install_bundled_mod(config: dict[str, Any], force: bool = False) -> Path:
     patches = sorted(patch_source.glob("patch_*.asm"))
     if not patches:
         raise RuntimeError("The bundled Hyrule Together code patches are missing")
-    signature_data = [archive.read_bytes(), model_builder.read_bytes(),
+    signature_data = [UKMM_DEPLOYMENT_SCHEMA, archive.read_bytes(), model_builder.read_bytes(),
                       str(update_root.stat().st_mtime_ns).encode()]
     for patch in patches:
         signature_data.extend((patch.name.encode(), patch.read_bytes()))
@@ -490,6 +533,10 @@ def install_bundled_mod(config: dict[str, Any], force: bool = False) -> Path:
         raise RuntimeError(f"Hyrule Together mod merge failed:\n{details[-3000:]}")
     if not (output_pack / "rules.txt").is_file():
         raise RuntimeError("UKMM completed without producing the Hyrule Together Cemu graphic pack")
+    _deploy_final_ukmm_merge(
+        ukmm_root / "storage" / "wiiu" / "profiles" / "Default" / "merged",
+        output_pack,
+    )
     model_result = subprocess.run(
         [str(model_builder), str(base_content), str(update_content), str(output_pack / "content")],
         capture_output=True, text=True, timeout=900, check=False,
