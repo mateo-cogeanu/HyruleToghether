@@ -82,8 +82,10 @@ namespace DataTypes
 			const std::string RIGHT_DEFAULT = playerPrefix + "RightHandWeaponLongName";
 			const std::string LEFT_DEFAULT = playerPrefix + "LeftHandWeaponLongName";
 			const std::string BOW_DEFAULT = playerPrefix + "BowWeaponLongName";
+			std::unique_lock<std::shared_mutex> lock(Mutex);
 
 			FindWeaponAddr(baseAddr);
+			RemoveActorLocalTemplateAddresses();
 			FindWeaponTemplateAddrs(RIGHT_DEFAULT, LEFT_DEFAULT, BOW_DEFAULT);
 
 			uint64_t OldAddress = ArmorAddrs.Face;
@@ -114,8 +116,6 @@ namespace DataTypes
 			if (LastKnown->Bow != 0)
 				BowWeapon = "Weapon_Bow_" + NumToStr(LastKnown->Bow);
 
-			Mutex.lock();
-
 			WriteWeaponResource(
 				WeaponTemplateAddrs.Right, WeaponAddrs.Right,
 				RightHandWeapon, RIGHT_DEFAULT.size() + 1);
@@ -133,8 +133,6 @@ namespace DataTypes
 
 			if (OldAddress == ArmorAddrs.Face)
 				Changed = false;
-
-			Mutex.unlock();
 		}
 
 		void SetArmor()
@@ -321,6 +319,48 @@ namespace DataTypes
 		std::shared_mutex Mutex;
 		bool WeaponTemplateScanComplete = false;
 
+		bool IsActorLocalWeaponAddress(uint64_t address) const
+		{
+			return address != 0 &&
+				(address == WeaponAddrs.Right || address == WeaponAddrs.Left || address == WeaponAddrs.Bow);
+		}
+
+		void RemoveActorLocalTemplateAddresses()
+		{
+			auto removeActorAddress = [this](std::vector<uint64_t>& addresses) {
+				addresses.erase(
+					std::remove_if(
+						addresses.begin(), addresses.end(),
+						[this](uint64_t address) { return IsActorLocalWeaponAddress(address); }),
+					addresses.end());
+			};
+			removeActorAddress(WeaponTemplateAddrs.Right);
+			removeActorAddress(WeaponTemplateAddrs.Left);
+			removeActorAddress(WeaponTemplateAddrs.Bow);
+		}
+
+		bool IsMappedWriteRange(uint64_t address, size_t capacity) const
+		{
+			if (address == 0 || capacity == 0 ||
+				address > std::numeric_limits<uint64_t>::max() - capacity)
+				return false;
+
+			const uint64_t memoryBase = Memory::getBaseAddress();
+			if (memoryBase == 0 || address < memoryBase ||
+				address - memoryBase > std::numeric_limits<uint32_t>::max() - capacity)
+				return false;
+
+			MEMORY_BASIC_INFORMATION memoryInfo{};
+			const DWORD rejectedProtection = PAGE_GUARD | PAGE_NOCACHE | PAGE_NOACCESS;
+			if (VirtualQuery(reinterpret_cast<LPCVOID>(address), &memoryInfo, sizeof(memoryInfo)) == 0 ||
+				!(memoryInfo.State & MEM_COMMIT) || (memoryInfo.Protect & rejectedProtection))
+				return false;
+
+			const uint64_t regionStart = reinterpret_cast<uint64_t>(memoryInfo.BaseAddress);
+			return address >= regionStart && memoryInfo.RegionSize >= capacity &&
+				address - regionStart <= memoryInfo.RegionSize - capacity;
+		}
+
 		void FindWeaponTemplateAddrs(
 			const std::string& rightPlaceholder,
 			const std::string& leftPlaceholder,
@@ -334,6 +374,8 @@ namespace DataTypes
 			for (uint64_t address : Memory::PatternScanMultiple(
 				signature, Memory::getBaseAddress(), 8, 0, false, 0, 0))
 			{
+				if (IsActorLocalWeaponAddress(address))
+					continue;
 				std::string value = Memory::read_string(address, 64, __FUNCTION__);
 				if (value == rightPlaceholder &&
 					std::find(WeaponTemplateAddrs.Right.begin(), WeaponTemplateAddrs.Right.end(), address) ==
@@ -363,17 +405,32 @@ namespace DataTypes
 		}
 
 		void WriteWeaponResource(
-			const std::vector<uint64_t>& templateAddresses,
+			std::vector<uint64_t>& templateAddresses,
 			uint64_t actorAddress,
 			const std::string& resource,
 			size_t capacity)
 		{
-			for (uint64_t address : templateAddresses)
-				Memory::write_string(address, resource, static_cast<int>(capacity), __FUNCTION__);
-			if (actorAddress != 0 &&
+			templateAddresses.erase(
+				std::remove_if(
+					templateAddresses.begin(), templateAddresses.end(),
+					[this, &resource, capacity](uint64_t address) {
+						if (!IsMappedWriteRange(address, capacity))
+							return true;
+						Memory::write_string(address, resource, static_cast<int>(capacity), __FUNCTION__);
+						return false;
+					}),
+				templateAddresses.end());
+			if (IsMappedWriteRange(actorAddress, capacity) &&
 				std::find(templateAddresses.begin(), templateAddresses.end(), actorAddress) == templateAddresses.end())
 			{
 				Memory::write_string(actorAddress, resource, static_cast<int>(capacity), __FUNCTION__);
+			}
+			else if (actorAddress != 0 && !IsMappedWriteRange(actorAddress, capacity))
+			{
+				Logging::LoggerService::LogWarning(
+					"Skipped stale actor-local equipment address for player " +
+					std::to_string(PlayerNumber) + ".",
+					__FUNCTION__);
 			}
 		}
 

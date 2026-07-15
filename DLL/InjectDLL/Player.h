@@ -63,6 +63,7 @@ namespace MemoryAccess
 		std::thread pThread;
 		std::atomic<bool> RunThread{ false };
 		std::atomic<bool> SpawnPending{ false };
+		std::atomic<bool> EquipmentRefreshPending{ false };
 		DWORD SpawnRequestedAt = 0;
 #ifndef _WIN32
 		std::atomic<bool> AnimationControlsResolved{ false };
@@ -257,6 +258,7 @@ namespace MemoryAccess
 				Memory::write_string(HoldAddr, PlayerData->IsEquipped ? "Hold" : "Equip", 6, __FUNCTION__);
 			if (equipmentChanged && this->baseAddr != 0)
 			{
+				this->EquipmentRefreshPending.store(true, std::memory_order_release);
 				this->Equipment->SetWeapons(this->baseAddr);
 				this->Equipment->SetArmor();
 			}
@@ -359,6 +361,7 @@ namespace MemoryAccess
 		{
 			//this->Delete->set(false, __FUNCTION__);
 			this->Status->set(0, __FUNCTION__);
+			this->EquipmentRefreshPending.store(false, std::memory_order_release);
 			connected = true;
 			if (PlayerNumber != 32)
 			{
@@ -381,6 +384,7 @@ namespace MemoryAccess
 			//this->Delete->set(true, __FUNCTION__);
 			this->Status->set(DELETE_STATUS, __FUNCTION__);
 			this->RunThread.store(false, std::memory_order_release);
+			this->EquipmentRefreshPending.store(false, std::memory_order_release);
 			if (pThread.joinable())
 				pThread.join();
 			setAddress(0);
@@ -393,6 +397,7 @@ namespace MemoryAccess
 			// into the title, then clear host-side pointers only.
 			connected = false;
 			this->RunThread.store(false, std::memory_order_release);
+			this->EquipmentRefreshPending.store(false, std::memory_order_release);
 			if (pThread.joinable())
 				pThread.join();
 			setAddress(0);

@@ -160,15 +160,20 @@ void Player::PThread()
 			// here depended on a dead delete EventFlow, produced duplicate actors,
 			// and discarded the live animation controller we need to drive.
 			if (exists && this->Equipment->SetupFailed &&
+				!this->EquipmentRefreshPending.load(std::memory_order_acquire) &&
 				(LastEquipmentRetry == 0 ||
 				 float(GetTickCount() - LastEquipmentRetry) / 1000.0f >= 1.0f))
 			{
 				LastEquipmentRetry = GetTickCount();
-				this->Equipment->SetWeapons(this->baseAddr);
-				if (this->Model.ModelType == 0)
-					this->Equipment->SetArmor();
-				else if (this->Model.ModelType == 1)
-					this->Equipment->SetModel(this->Model.Model);
+				if (this->baseAddr != 0 &&
+					!this->EquipmentRefreshPending.load(std::memory_order_acquire))
+				{
+					this->Equipment->SetWeapons(this->baseAddr);
+					if (this->Model.ModelType == 0)
+						this->Equipment->SetArmor();
+					else if (this->Model.ModelType == 1)
+						this->Equipment->SetModel(this->Model.Model);
+				}
 			}
 
 			if (failedToDelete)
@@ -276,9 +281,8 @@ void Player::PThread()
 
 				if (this->Model.ModelType == 0)
 				{
-					Logging::LoggerService::LogDebug("Setting up " + std::to_string(this->PlayerNumber) + " armor...", __FUNCTION__);
-					//this->Bumii->WriteMiiData(1033785125, 598924800);
-					this->Equipment->SetArmor();
+					// Armor and equipment addresses belong to a live actor. The
+					// OnActorCreate callback stages them before the controlled reload.
 				}
 				else if (this->Model.ModelType == 1)
 				{

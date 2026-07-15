@@ -1010,6 +1010,8 @@ void OnActorCreate(PPCInterpreter_t* hCPU)
 		const bool requiresEquipmentReload =
 			player->second->Equipment->ConsumeActorRefresh() &&
 			player->second->Model.ModelType == 0;
+		if (requiresEquipmentReload)
+			player->second->EquipmentRefreshPending.store(true, std::memory_order_release);
 		player->second->Equipment->SetWeapons(hCPU->gpr[3]);
 		player->second->Equipment->SetArmor();
 		player->second->Bumii->setAddress(hCPU->gpr[3]);
@@ -1023,6 +1025,10 @@ void OnActorCreate(PPCInterpreter_t* hCPU)
 				"; scheduling one actor reload.",
 				__FUNCTION__);
 			queueRemoteActorRefresh(spawnedPlayer, hCPU->gpr[3]);
+		}
+		else
+		{
+			player->second->EquipmentRefreshPending.store(false, std::memory_order_release);
 		}
 	}
 
