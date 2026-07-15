@@ -267,6 +267,17 @@ void setup(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint64_t baseAddress)
 
 void queueActor(int playerNumber, float Position[3])
 {
+	const auto activePlayer = Instances::PlayerList.find(playerNumber);
+	if (activePlayer != Instances::PlayerList.end() && activePlayer->second->baseAddr != 0)
+	{
+		activePlayer->second->SpawnPending.store(false, std::memory_order_release);
+		Logging::LoggerService::LogDebug(
+			"Discarded queued player " + std::to_string(playerNumber) +
+			" creation because its replacement actor already exists.",
+			__FUNCTION__);
+		return;
+	}
+
 	if (queuedActors.size() > 0)
 		for (int i = 0; i < queuedActors.size(); i++)
 			if (queuedActors[i].Name == "Jugador" + std::to_string(playerNumber))
@@ -378,6 +389,21 @@ void resetRemoteAnimationDispatch(int playerNumber)
 
 void setupActor(PPCInterpreter_t* hCPU, TransferableData& trnsData, InstanceData& instData, uint32_t startRingBuffer, uint32_t endRingBuffer, uint64_t baseAddress) {
 	QueueActor qAct = queuedActors[0];
+	int queuedPlayer = 0;
+	if (TryParseRemotePlayerActor(qAct.Name, queuedPlayer))
+	{
+		const auto activePlayer = Instances::PlayerList.find(queuedPlayer);
+		if (activePlayer != Instances::PlayerList.end() && activePlayer->second->baseAddr != 0)
+		{
+			activePlayer->second->SpawnPending.store(false, std::memory_order_release);
+			queuedActors.erase(queuedActors.begin());
+			Logging::LoggerService::LogDebug(
+				"Cancelled player " + std::to_string(queuedPlayer) +
+				" spawn dispatch because its replacement actor already exists.",
+				__FUNCTION__);
+			return;
+		}
+	}
 
 
 	// Lets set any data that our params will reference:

@@ -299,6 +299,18 @@ void Player::PThread()
 					continue;
 				}
 
+				// An asynchronous OnActorCreate callback may arrive after this loop
+				// selected ActCreate but before the request is submitted. Let that
+				// callback win instead of queuing a duplicate synthetic actor.
+				if (this->baseAddr != 0)
+				{
+					this->SpawnPending.store(false, std::memory_order_release);
+					Logging::LoggerService::LogDebug(
+						"Cancelled stale create decision because the replacement actor already exists.",
+						__FUNCTION__);
+					continue;
+				}
+
 				this->SpawnRequestedAt = GetTickCount();
 				this->SpawnPending.store(true, std::memory_order_release);
 				GameInstance->RequestCreate(this->PlayerNumber, this->LastServerPosition);

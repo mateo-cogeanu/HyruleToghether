@@ -77,6 +77,7 @@ All notable changes made while turning the original Windows-only Milk Bar Launch
 
 ### Cross-platform native client
 
+- Fixed a macOS crash during the controlled equipment reload. If the asynchronous replacement callback arrives after the player worker has already selected a create action, the stale creation is now cancelled at the worker, host queue, and final PPC dispatch boundaries instead of reaching BOTW as a duplicate synthetic actor.
 - Restored visible armor, melee weapon, shield, and bow synchronization without changing direct animation dispatch. The first actor now stages its cached equipment resource names and performs exactly one controlled reload so BOTW instantiates those visuals; subsequent replacements do not loop, and armor logs include the exact selected model names.
 - Prevented remote players from flashing in a T-pose and then disappearing during equipment synchronization. The client now caches armor and weapon data before the actor's first spawn, deterministically enables its replacement when a direct refresh deletion returns even on native Cemu builds that omit the asynchronous actor-erase callback, and prevents a delayed stale erase callback from clearing the replacement actor.
 - Fixed the remaining native-Cemu remote-player T-pose race. The client now stages the latest normal animation before actor creation, and the generated multiplayer EventFlow no longer permanently suppresses `Demo_PlayASForDemo` after an initial placeholder request; all 32 player actions retry each frame until the live `Anim_<hash>` control is consumed.
