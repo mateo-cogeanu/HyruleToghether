@@ -78,6 +78,8 @@ All notable changes made while turning the original Windows-only Milk Bar Launch
 ### Cross-platform native client
 
 - Added a CMake build for the injected/native multiplayer client, producing `.dylib` on macOS and `.so` on Linux.
+- Made remote animation synchronization resilient to BOTW actor-initialization timing. If a newly spawned `Jugador` actor's animation component is not ready in `OnActorCreate`, the native client now retries the pointer chain at a bounded rate and applies the latest received hash as soon as it becomes valid instead of permanently disabling animation for that actor. The animation pointer and writes remain serialized with actor-address changes, and a server regression test verifies the signed 32-bit hash survives both DTO mappings unchanged.
+- Added a pre-sync stale-player cleanup phase. Before accepting server-driven spawns, the client discards queued `Jugador` replacements, raises the established delete status for all 32 player slots, rejects actor creations observed during the two-second cleanup window, tracks erasures, clears stale native addresses, and only then enables replacement actors. This removes leftover duplicate player instances across reconnects/title sessions without changing platform-specific spawning behavior.
 - Added a compatibility platform layer for Win32 types, timing, threads, virtual-memory queries, dynamic symbol lookup, filesystem paths, sockets, and endian-sensitive memory access.
 - Replaced Windows named pipes with a local Unix-domain socket IPC channel on macOS/Linux.
 - Added portable application-data path handling.

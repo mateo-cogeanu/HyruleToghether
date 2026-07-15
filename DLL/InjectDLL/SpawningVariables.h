@@ -129,6 +129,85 @@ std::map<char, bool> prevKeyStateMap; // Used for key press logic - keeps track 
 
 std::vector<QueueActor> queuedActors;
 
+// Setup raises every remote actor's delete flag before network data can enqueue
+// replacements. Keep actor callbacks in cleanup mode until the grace period is
+// complete so an old Jugador instance cannot be adopted as the current player.
+std::atomic<bool> stalePlayerCleanupActive{false};
+std::atomic<int> stalePlayerEraseCount{0};
+
+bool TryParseRemotePlayerActor(const std::string& name, int& playerNumber)
+{
+	if (name.rfind("Jugador", 0) != 0 || name.size() <= 7)
+		return false;
+
+	int parsedNumber = 0;
+	for (size_t i = 7; i < name.size(); ++i)
+	{
+		if (name[i] < '0' || name[i] > '9')
+			return false;
+		parsedNumber = parsedNumber * 10 + (name[i] - '0');
+		if (parsedNumber > 32)
+			return false;
+	}
+
+	if (parsedNumber < 1)
+		return false;
+	playerNumber = parsedNumber;
+	return true;
+}
+
+void DespawnStalePlayerActors()
+{
+	if (Instances::PlayerList.empty())
+		return;
+
+	stalePlayerEraseCount.store(0, std::memory_order_relaxed);
+	stalePlayerCleanupActive.store(true, std::memory_order_release);
+	size_t discardedRequests = 0;
+	{
+		std::unique_lock<std::shared_mutex> queueLock(queue_mutex);
+		const size_t previousSize = queuedActors.size();
+		queuedActors.erase(
+			std::remove_if(queuedActors.begin(), queuedActors.end(), [](const QueueActor& actor) {
+				int playerNumber = 0;
+				return TryParseRemotePlayerActor(actor.Name, playerNumber);
+			}),
+			queuedActors.end());
+		discardedRequests = previousSize - queuedActors.size();
+	}
+	Logging::LoggerService::LogInformation(
+		"Despawning stale remote player actors before multiplayer synchronization; discarded " +
+			std::to_string(discardedRequests) + " queued replacement request(s).",
+		__FUNCTION__);
+
+	for (const auto& player : Instances::PlayerList)
+	{
+		player.second->setAddress(0);
+		player.second->Status->set(1, __FUNCTION__);
+	}
+
+	// BOTW consumes the status flags from its actor update loop. The bounded
+	// grace period runs before server sync starts, so it cannot race a valid new
+	// spawn and does not depend on a particular PPC core reaching an HLE hook.
+	const DWORD cleanupStart = GetTickCount();
+	while (Main::IsCemuTitleActive() &&
+		static_cast<DWORD>(GetTickCount() - cleanupStart) < 2000)
+		Sleep(50);
+
+	stalePlayerCleanupActive.store(false, std::memory_order_release);
+	for (const auto& player : Instances::PlayerList)
+	{
+		player.second->setAddress(0);
+		player.second->Status->set(0, __FUNCTION__);
+	}
+
+	Logging::LoggerService::LogInformation(
+		"Stale remote player cleanup finished; erased " +
+			std::to_string(stalePlayerEraseCount.load(std::memory_order_relaxed)) +
+			" actor instance(s).",
+		__FUNCTION__);
+}
+
 MemoryInstance* memInstance;
 
 bool isSetup = false;
@@ -502,16 +581,41 @@ void OnActorCreate(PPCInterpreter_t* hCPU)
 
 	if (name.rfind("Jugador", 0) == 0)
 	{
-		int spawnedPlayer = std::stoi(name.replace(0, 7, ""));
+		int spawnedPlayer = 0;
+		if (!TryParseRemotePlayerActor(name, spawnedPlayer))
+		{
+			Logging::LoggerService::LogWarning(
+				"Ignoring malformed remote player actor name: " + name,
+				__FUNCTION__);
+			return;
+		}
+		auto player = Instances::PlayerList.find(spawnedPlayer);
+		if (player == Instances::PlayerList.end())
+		{
+			Logging::LoggerService::LogWarning(
+				"Ignoring remote player actor before its slot is configured: " + name,
+				__FUNCTION__);
+			return;
+		}
+
+		if (stalePlayerCleanupActive.load(std::memory_order_acquire))
+		{
+			player->second->Status->set(1, __FUNCTION__);
+			std::stringstream cleanupStream;
+			cleanupStream << "Marked stale player " << spawnedPlayer << " at 0x"
+				<< std::hex << Main::baseAddr + hCPU->gpr[3] << " for despawn.";
+			Logging::LoggerService::LogDebug(cleanupStream.str(), __FUNCTION__);
+			return;
+		}
 
 		std::stringstream stream;
 		stream << "Spawned player " << spawnedPlayer << " at: " << std::hex << Main::baseAddr + hCPU->gpr[3] << ". Setting up addresses.";
 		Logging::LoggerService::LogDebug(stream.str(), __FUNCTION__);
 
-		Instances::PlayerList[spawnedPlayer]->setAddress(hCPU->gpr[3]);
-		Instances::PlayerList[spawnedPlayer]->Equipment->SetWeapons(hCPU->gpr[3]);
-		Instances::PlayerList[spawnedPlayer]->Equipment->SetArmor();
-		Instances::PlayerList[spawnedPlayer]->Bumii->setAddress(hCPU->gpr[3]);
+		player->second->setAddress(hCPU->gpr[3]);
+		player->second->Equipment->SetWeapons(hCPU->gpr[3]);
+		player->second->Equipment->SetArmor();
+		player->second->Bumii->setAddress(hCPU->gpr[3]);
 
 		Logging::LoggerService::LogDebug("Player " + std::to_string(spawnedPlayer) + " setup correctly.", __FUNCTION__);
 	}
@@ -594,10 +698,21 @@ void OnActorErase(PPCInterpreter_t* hCPU)
 	std::vector<std::string> RealBombChoices = { "RemoteBomb", "RemoteBomb2", "RemoteBombCube", "RemoteBombCube2" };
 
 	if (name.rfind("Jugador", 0) == 0) {
-		int spawnedPlayer = std::stoi(name.replace(0, 7, ""));
+		int spawnedPlayer = 0;
+		if (!TryParseRemotePlayerActor(name, spawnedPlayer))
+			return;
+		auto player = Instances::PlayerList.find(spawnedPlayer);
+		if (player == Instances::PlayerList.end())
+			return;
 		//Instances::PlayerList[spawnedPlayer]->Delete->set(false, __FUNCTION__);
-		Instances::PlayerList[spawnedPlayer]->Status->set(0, __FUNCTION__);
-		Instances::PlayerList[spawnedPlayer]->setAddress(0);
+		if (stalePlayerCleanupActive.load(std::memory_order_acquire))
+		{
+			player->second->Status->set(1, __FUNCTION__);
+			stalePlayerEraseCount.fetch_add(1, std::memory_order_relaxed);
+		}
+		else
+			player->second->Status->set(0, __FUNCTION__);
+		player->second->setAddress(0);
 		std::stringstream stream;
 		stream << "Player " << spawnedPlayer << " erased.";
 		Logging::LoggerService::LogDebug(stream.str(), __FUNCTION__);

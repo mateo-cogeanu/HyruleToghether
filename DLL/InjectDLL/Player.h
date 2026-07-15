@@ -79,22 +79,19 @@ namespace MemoryAccess
 
 		void setAddress(uint64_t addr)
 		{
-			Mutex.lock();
+			std::unique_lock<std::shared_mutex> lock(Mutex);
 			Actor::setAddress(addr);
 			delete AnimationState;
 			AnimationState = nullptr;
-			if (this->baseAddr != 0)
-			{
-				const uint64_t animationAddress = Memory::ReadPointers(
-					this->baseAddr, { 0x448, 0x4C, 0x10, 0x19C, 0x38, 0xA0, 0x10, -0x5C }, true) + 0x10;
-				if (animationAddress >= 30000)
-					AnimationState = new BigEndian<int>(animationAddress, "Player::setAddress::Animation");
-				else
-					Logging::LoggerService::LogWarning(
-						"Remote animation state is not ready; continuing with position synchronization.",
-						"Player::setAddress::Animation");
-			}
-			Mutex.unlock();
+			AnimationApplied = false;
+			AnimationWaitLogged = false;
+			LastAnimationResolveAttempt = 0;
+
+			// Actor creation is reported before every internal component has
+			// necessarily finished initializing. Try immediately, then let set()
+			// retry without treating a temporarily incomplete pointer chain as a
+			// fatal actor setup failure.
+			ResolveAnimationStateLocked();
 		}
 
 		void set(DTO::CloseCharacterDTO* PlayerData, bool DispNames, bool isPaused)
@@ -113,8 +110,18 @@ namespace MemoryAccess
 
 			LastServerPosition = PlayerData->Position;
 
-			if (this->baseAddr == 0 || !PlayerData->Updated)
+			if (this->baseAddr == 0)
 				return;
+
+			// Updated can be false while the actor's internal animation component
+			// is still coming online. Keep resolving against the latest received
+			// hash so a one-time creation race cannot disable animation forever.
+			if (!PlayerData->Updated)
+			{
+				if (!isPaused)
+					ApplyAnimation(PlayerData->Animation);
+				return;
+			}
 
 			const std::string DEFAULT_ANIM = "Jugador" + std::to_string(PlayerNumber) + "_animationthing";
 			const std::string DEFAULT_ATTACK = "Jugador32_AttackAnimation";
@@ -184,8 +191,7 @@ namespace MemoryAccess
 				}
 			}
 			
-			if (AnimationState != nullptr && PlayerData->Animation != LastAnimation)
-				AnimationState->set(PlayerData->Animation, __FUNCTION__);
+			ApplyAnimation(PlayerData->Animation);
 			LastAnimation = PlayerData->Animation;
 
 			if (HoldAddr != 0)
@@ -312,11 +318,9 @@ namespace MemoryAccess
 				Memory::MessagerService::AddMessage("Player " + Name + " left.");
 			}
 			UpdateMapPin(Vec3f(0, 0, 0), false);
-			Mutex.lock();
-			this->baseAddr = 0;
 			//this->Delete->set(true, __FUNCTION__);
 			this->Status->set(1, __FUNCTION__);
-			Mutex.unlock();
+			setAddress(0);
 			this->RunThread = false;
 			pThread.join();
 		}
@@ -337,8 +341,62 @@ namespace MemoryAccess
 
 	private:
 		std::shared_mutex Mutex;
+		DWORD LastAnimationResolveAttempt = 0;
+		int LastAppliedAnimation = 0;
+		bool AnimationApplied = false;
+		bool AnimationWaitLogged = false;
+		static constexpr DWORD ANIMATION_RESOLVE_RETRY_MS = 250;
 
 		void PThread();
+
+		bool ResolveAnimationStateLocked()
+		{
+			if (this->baseAddr == 0)
+				return false;
+
+			const DWORD now = GetTickCount();
+			if (LastAnimationResolveAttempt != 0 &&
+				static_cast<DWORD>(now - LastAnimationResolveAttempt) < ANIMATION_RESOLVE_RETRY_MS)
+				return false;
+			LastAnimationResolveAttempt = now;
+
+			const uint64_t animationRoot = Memory::ReadPointers(
+				this->baseAddr, { 0x448, 0x4C, 0x10, 0x19C, 0x38, 0xA0, 0x10, -0x5C }, true);
+			const uint64_t animationAddress = animationRoot == 0 ? 0 : animationRoot + 0x10;
+			if (animationAddress < 30000)
+			{
+				if (!AnimationWaitLogged)
+				{
+					Logging::LoggerService::LogWarning(
+						"Remote animation state is not ready; retrying while position synchronization continues.",
+						"Player::ResolveAnimationState");
+					AnimationWaitLogged = true;
+				}
+				return false;
+			}
+
+			AnimationState = new BigEndian<int>(animationAddress, "Player::ResolveAnimationState");
+			AnimationApplied = false;
+			std::stringstream stream;
+			stream << "Remote animation synchronization ready for player " << PlayerNumber
+				<< " at 0x" << std::hex << animationAddress << ".";
+			Logging::LoggerService::LogInformation(stream.str(), "Player::ResolveAnimationState");
+			return true;
+		}
+
+		void ApplyAnimation(int animation)
+		{
+			std::unique_lock<std::shared_mutex> lock(Mutex);
+			if (AnimationState == nullptr && !ResolveAnimationStateLocked())
+				return;
+
+			if (!AnimationApplied || animation != LastAppliedAnimation)
+			{
+				AnimationState->set(animation, __FUNCTION__);
+				LastAppliedAnimation = animation;
+				AnimationApplied = true;
+			}
+		}
 
 		void ManageBomb(Vec3f BombData, int bomb)
 		{

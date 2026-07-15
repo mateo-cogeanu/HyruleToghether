@@ -2081,6 +2081,8 @@ void Main::Setup()
 
     Flags.clear();
 
+    DespawnStalePlayerActors();
+
     Game::GameInstance->QuestService->Startup(isQuestSync, questServerSettings);
 
     Memory::MultiplayerQuest::changeMQuestSvName(serverName, 0);
