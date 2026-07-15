@@ -115,6 +115,11 @@ static_assert(sizeof(InstanceData) == 256, "Spawn instance ring entry must remai
 		uint32_t animation;
 	};
 
+	extern struct QueueActorDelete {
+		int playerNumber;
+		uint32_t actorAddress;
+	};
+
 // ---------------------------------------------------------------------------------
 // This is an example function call.
 // - Feel free to expand / change -
@@ -136,6 +141,7 @@ enum class PendingDispatchKind
 {
 	None,
 	Spawn,
+	ActorDelete,
 	Animation
 };
 
@@ -156,6 +162,7 @@ std::map<int, DWORD> lastAnimationPointerWarning;
 std::map<char, bool> prevKeyStateMap; // Used for key press logic - keeps track of previous key state
 
 std::vector<QueueActor> queuedActors;
+std::vector<QueueActorDelete> queuedActorDeletes;
 std::vector<QueueAnimation> queuedAnimations;
 
 // Setup raises every remote actor's delete flag before network data can enqueue
@@ -204,6 +211,7 @@ void DespawnStalePlayerActors()
 			queuedActors.end());
 		discardedRequests = previousSize - queuedActors.size();
 		queuedAnimations.clear();
+		queuedActorDeletes.clear();
 		completedAnimations.clear();
 	}
 	Logging::LoggerService::LogInformation(
@@ -320,6 +328,36 @@ void queueRemoteAnimation(int playerNumber, uint64_t actorAddress, uint32_t anim
 	}
 
 	queuedAnimations.push_back({playerNumber, guestActorAddress, animation});
+}
+
+void queueRemoteActorRefresh(int playerNumber, uint64_t actorAddress)
+{
+	if (playerNumber < 1 || playerNumber > 32 || actorAddress == 0 ||
+		actorAddress > std::numeric_limits<uint32_t>::max())
+		return;
+
+	const uint32_t guestActorAddress = static_cast<uint32_t>(actorAddress);
+	std::unique_lock<std::shared_mutex> queueLock(queue_mutex);
+	for (const QueueActorDelete& queued : queuedActorDeletes)
+	{
+		if (queued.playerNumber == playerNumber && queued.actorAddress == guestActorAddress)
+			return;
+	}
+
+	queuedAnimations.erase(
+		std::remove_if(
+			queuedAnimations.begin(),
+			queuedAnimations.end(),
+			[playerNumber](const QueueAnimation& queued) {
+				return queued.playerNumber == playerNumber;
+			}),
+		queuedAnimations.end());
+	completedAnimations.erase(playerNumber);
+	queuedActorDeletes.push_back({playerNumber, guestActorAddress});
+	Logging::LoggerService::LogDebug(
+		"Queued player " + std::to_string(playerNumber) +
+		" for a direct equipment refresh.",
+		__FUNCTION__);
 }
 
 void setupActor(PPCInterpreter_t* hCPU, TransferableData& trnsData, InstanceData& instData, uint32_t startRingBuffer, uint32_t endRingBuffer, uint64_t baseAddress) {
@@ -574,6 +612,49 @@ bool setupAnimation(PPCInterpreter_t* hCPU, TransferableData& trnsData,
 	return true;
 }
 
+bool setupActorDelete(PPCInterpreter_t* hCPU, TransferableData& trnsData)
+{
+	const QueueActorDelete queued = queuedActorDeletes.front();
+	const auto player = Instances::PlayerList.find(queued.playerNumber);
+	if (player == Instances::PlayerList.end() ||
+		player->second->baseAddr != queued.actorAddress)
+	{
+		queuedActorDeletes.erase(queuedActorDeletes.begin());
+		return false;
+	}
+
+	trnsData.f_r3 = static_cast<int>(queued.actorAddress);
+	trnsData.f_r4 = 0;
+	trnsData.f_r5 = 0;
+	trnsData.f_r6 = 0;
+	trnsData.f_r7 = 0;
+	trnsData.f_r8 = 0;
+	trnsData.f_r9 = 0;
+	trnsData.f_r10 = 0;
+	hCPU->gpr[3] = queued.actorAddress;
+	for (int reg = 4; reg <= 10; ++reg)
+		hCPU->gpr[reg] = 0;
+
+	// ksys::act::BaseProc::deleteLater(DeleteReason::_0). This is the same
+	// Wii U entry intercepted by patch_UKL_ActorInterceptor.asm, so the native
+	// actor bookkeeping is cleared as soon as the game accepts the request.
+	trnsData.fnAddr = 0x0378a374;
+	trnsData.dispatchState = 1;
+	trnsData.enabled = true;
+	trnsData.interceptRegisters = false;
+	pending_spawn_sequence = ++spawn_request_sequence;
+	pending_spawn_name = "Jugador" + std::to_string(queued.playerNumber);
+	pending_dispatch_kind = PendingDispatchKind::ActorDelete;
+	last_observed_dispatch_state = -1;
+
+	Logging::LoggerService::LogDebug(
+		"Submitted direct equipment refresh for player " +
+		std::to_string(queued.playerNumber) + ".",
+		__FUNCTION__);
+	queuedActorDeletes.erase(queuedActorDeletes.begin());
+	return true;
+}
+
 void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBuffer, uint32_t endRingBuffer, uint64_t baseAddress) {
 	hCPU->instructionPointer = hCPU->sprNew.LR; // Tell it where to return to - REQUIRED
 	// Multiple emulated PPC cores can enter this native HLE callback at once.
@@ -618,8 +699,9 @@ void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBu
 	if (trnsData.enabled) {
 		if (trnsData.dispatchState != last_observed_dispatch_state) {
 			last_observed_dispatch_state = trnsData.dispatchState;
-			const std::string dispatchType =
-				pending_dispatch_kind == PendingDispatchKind::Animation ? "Animation" : "Spawn";
+			const std::string dispatchType = pending_dispatch_kind == PendingDispatchKind::Animation ?
+				"Animation" : pending_dispatch_kind == PendingDispatchKind::ActorDelete ?
+				"Actor refresh" : "Spawn";
 			if (trnsData.dispatchState == 1) {
 				Logging::LoggerService::LogDebug(
 					dispatchType + " request " + std::to_string(pending_spawn_sequence) +
@@ -640,8 +722,9 @@ void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBu
 		return;
 	}
 	if (pending_spawn_sequence != 0) {
-		const std::string dispatchType =
-			pending_dispatch_kind == PendingDispatchKind::Animation ? "Animation" : "Spawn";
+		const std::string dispatchType = pending_dispatch_kind == PendingDispatchKind::Animation ?
+			"Animation" : pending_dispatch_kind == PendingDispatchKind::ActorDelete ?
+			"Actor refresh" : "Spawn";
 		Logging::LoggerService::LogDebug(
 			dispatchType + " request " + std::to_string(pending_spawn_sequence) +
 			" (" + pending_spawn_name + ") returned from BOTW.",
@@ -673,6 +756,9 @@ void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBu
 		memInstance->memory_readMemoryBE(static_cast<uint32_t>(trnsData.ringPtr), &instData, baseAddress);
 		data_mutex.unlock_shared();
 		setupActor(hCPU, trnsData, instData, startRingBuffer, endRingBuffer, baseAddress);
+	}
+	else if (!queuedActorDeletes.empty()) {
+		setupActorDelete(hCPU, trnsData);
 	}
 	else if (!queuedAnimations.empty()) {
 		setupAnimation(

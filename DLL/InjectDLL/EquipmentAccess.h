@@ -9,58 +9,72 @@ namespace DataTypes
 	public:
 		bool Changed = false;
 		bool SetupFailed = false;
+		bool NeedsActorRefresh = false;
 		CharacterEquipment* LastKnown = new CharacterEquipment();
 		std::string lastBase = "Jugador1ModelNameLongForASpecificReasonHead";
 
 		bool Compare(CharacterEquipment newEquipment)
 		{
-			Mutex.lock();
+			std::unique_lock<std::shared_mutex> lock(Mutex);
+			bool changed = false;
 
 			if (LastKnown->WType != newEquipment.WType)
 			{
-				Changed = true;
+				changed = true;
 				LastKnown->WType = newEquipment.WType;
 			}
 			if (LastKnown->Sword != newEquipment.Sword)
 			{
-				Changed = true;
+				changed = true;
 				LastKnown->Sword = newEquipment.Sword;
 			}
 			if (LastKnown->Shield != newEquipment.Shield)
 			{
-				Changed = true;
+				changed = true;
 				LastKnown->Shield = newEquipment.Shield;
 			}
 			if (LastKnown->Bow != newEquipment.Bow)
 			{
-				Changed = true;
+				changed = true;
 				LastKnown->Bow = newEquipment.Bow;
 			}
 			if (LastKnown->Head != newEquipment.Head)
 			{
-				Changed = true;
+				changed = true;
 				LastKnown->Head = newEquipment.Head;
 			}
 			if (LastKnown->Upper != newEquipment.Upper)
 			{
-				Changed = true;
+				changed = true;
 				LastKnown->Upper = newEquipment.Upper;
 			}
 			if (LastKnown->Lower != newEquipment.Lower)
 			{
-				Changed = true;
+				changed = true;
 				LastKnown->Lower = newEquipment.Lower;
 			}
 
-			Mutex.unlock();
+			Changed = changed;
+			if (changed)
+				NeedsActorRefresh = true;
+			return changed;
+		}
 
-			return Changed;
+		bool ConsumeActorRefresh()
+		{
+			std::unique_lock<std::shared_mutex> lock(Mutex);
+			if (!NeedsActorRefresh)
+				return false;
+			NeedsActorRefresh = false;
+			Changed = false;
+			return true;
 		}
 
 		void SetWeapons(uint64_t baseAddr)
 		{
 			std::string RIGHT_DEFAULT = "RightHandWeaponLongName";
 			std::string LEFT_DEFAULT = "LeftHandWeaponLongName";
+			std::string BOW_DEFAULT = "BowWeaponLongName";
 
 			FindWeaponAddr(baseAddr);
 
@@ -70,6 +84,7 @@ namespace DataTypes
 
 			std::string RightHandWeapon = "Weapon_Null_";
 			std::string LeftHandWeapon = "Weapon_Shield_";
+			std::string BowWeapon = "Weapon_Bow_";
 
 			switch (LastKnown->WType)
 			{
@@ -88,6 +103,14 @@ namespace DataTypes
 
 			Memory::write_string(WeaponAddrs.Right, RightHandWeapon + NumToStr(LastKnown->Sword), RIGHT_DEFAULT.size() + 8, __FUNCTION__);
 			Memory::write_string(WeaponAddrs.Left, LeftHandWeapon + NumToStr(LastKnown->Shield), LEFT_DEFAULT.size() + 8, __FUNCTION__);
+			if (WeaponAddrs.Bow != 0)
+				Memory::write_string(WeaponAddrs.Bow, BowWeapon + NumToStr(LastKnown->Bow), BOW_DEFAULT.size() + 8, __FUNCTION__);
+			Logging::LoggerService::LogInformation(
+				"Equipment setup: weapon=" + RightHandWeapon + NumToStr(LastKnown->Sword) +
+				", shield=" + LeftHandWeapon + NumToStr(LastKnown->Shield) +
+				", bow=" + BowWeapon + NumToStr(LastKnown->Bow) +
+				(WeaponAddrs.Bow == 0 ? " (bow slot unavailable)." : "."),
+				__FUNCTION__);
 
 			if (OldAddress == ArmorAddrs.Face)
 				Changed = false;
@@ -220,6 +243,7 @@ namespace DataTypes
 
 		void FindWeaponAddr(uint64_t baseAddr)
 		{
+			WeaponAddrs = {};
 			uint64_t addr = Memory::ReadPointers(baseAddr, { 0x39C, 0x78, 0x244 }, false);
 
 			bool Found = false;
@@ -235,6 +259,9 @@ namespace DataTypes
 					addr = Memory::read_bigEndian4BytesOffset(temp + 0x4, __FUNCTION__);
 					this->WeaponAddrs.Right = Memory::read_bigEndian4BytesOffset(addr + 0x1C, __FUNCTION__) + Memory::getBaseAddress();
 					this->WeaponAddrs.Left = Memory::read_bigEndian4BytesOffset(addr + 0xA0, __FUNCTION__) + Memory::getBaseAddress();
+					uint32_t bowAddress = 0;
+					if (Memory::TryReadBigEndian4BytesOffset(addr + 0x124, bowAddress) && bowAddress != 0)
+						this->WeaponAddrs.Bow = bowAddress + Memory::getBaseAddress();
 				}
 
 				iterator++;
@@ -274,6 +301,7 @@ namespace DataTypes
 		{
 			uint64_t Left = 0;
 			uint64_t Right = 0;
+			uint64_t Bow = 0;
 		} WeaponAddrs;
 
 		struct ArmorAddr

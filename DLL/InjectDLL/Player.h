@@ -11,6 +11,7 @@
 #include "Vec3f_Operations.h"
 
 void queueRemoteAnimation(int playerNumber, uint64_t actorAddress, uint32_t animation);
+void queueRemoteActorRefresh(int playerNumber, uint64_t actorAddress);
 
 namespace MemoryAccess
 {
@@ -248,12 +249,14 @@ namespace MemoryAccess
 
 			if (HoldAddr != 0)
 				Memory::write_string(HoldAddr, PlayerData->IsEquipped ? "Hold" : "Equip", 6, __FUNCTION__);
-			this->Equipment->Changed = Equipment->Compare(PlayerData->Equipment);
-			if (this->Equipment->Changed && this->baseAddr != 0)
+			const bool equipmentChanged = Equipment->Compare(PlayerData->Equipment);
+			if (equipmentChanged && this->baseAddr != 0)
 			{
 				this->Equipment->SetWeapons(this->baseAddr);
 				this->Equipment->SetArmor();
 			}
+			if (this->baseAddr != 0 && this->Equipment->ConsumeActorRefresh())
+				queueRemoteActorRefresh(PlayerNumber, this->baseAddr);
 			AtkUp = PlayerData->AtkUp;
 			Health = PlayerData->Health;
 

@@ -135,6 +135,11 @@ All notable changes made while turning the original Windows-only Milk Bar Launch
   function-call bridge, including the required floating-point arguments, while
   coalescing unchanged network updates. Equipment changes and setup retries now
   update the existing actor instead of deleting and duplicating it.
+- Restored remote armour refreshes without regressing animation synchronization.
+  Equipment changes now use BOTW's real `BaseProc::deleteLater` entry instead of
+  the unscheduled delete EventFlow, then respawn exactly once with the updated
+  model names. Added the previously missing third equipment slot so bows refresh
+  together with right-hand weapons and shields.
 - Bundled a target-native model-builder utility.
 - Added automatic creation and validation of the remote-player BFRES model assets.
 - Added automatic UKMM merge against the user's own decrypted base game, update, and DLC files.
