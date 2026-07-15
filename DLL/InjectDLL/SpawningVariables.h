@@ -151,6 +151,8 @@ uint32_t pending_animation_actor = 0;
 uint32_t pending_animation_hash = 0;
 int pending_delete_player = 0;
 uint32_t pending_delete_actor = 0;
+bool actor_spawn_template_ready = false;
+InstanceData actor_spawn_template{};
 
 struct CompletedAnimation
 {
@@ -409,10 +411,25 @@ void setupActor(PPCInterpreter_t* hCPU, TransferableData& trnsData, InstanceData
 	// Lets set any data that our params will reference:
 	// -------------------------------------------------
 
-	// Copy needed data over to our own storage to not override actor stuff
-	data_mutex.lock_shared(); //////////////////////////////////////////////////
-	memInstance->memory_readMemoryBE(trnsData.f_r7, &instData.actorStorage, baseAddress);
-	data_mutex.unlock_shared(); //==============================================
+	// Capture the actor-factory storage exactly once from the first proven-good
+	// natural template. After a direct equipment deletion, unrelated factory
+	// calls can overwrite F_R7 with short-lived actor memory; dereferencing that
+	// recaptured pointer crashed Linux during the replacement spawn. Reuse the
+	// stable host copy for every synthetic Jugador instead.
+	if (!actor_spawn_template_ready)
+	{
+		data_mutex.lock_shared(); //////////////////////////////////////////////////
+		memInstance->memory_readMemoryBE(
+			trnsData.f_r7,
+			&actor_spawn_template.actorStorage,
+			baseAddress);
+		data_mutex.unlock_shared(); //==============================================
+		actor_spawn_template_ready = true;
+	}
+	memcpy(
+		&instData.actorStorage,
+		&actor_spawn_template.actorStorage,
+		sizeof(instData.actorStorage));
 
 	int actorStorageLocation = trnsData.ringPtr + sizeof(instData) - sizeof(instData.name) - sizeof(instData.actorStorage);
 	int mubinLocation = trnsData.ringPtr + sizeof(instData) - sizeof(instData.name) - sizeof(instData.actorStorage) + (7 * 4); // The MubinIter lives inside the actor btw
@@ -816,9 +833,10 @@ void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBu
 		pending_delete_actor = 0;
 		last_observed_dispatch_state = -1;
 	}
-	// No dispatch is pending, so natural actor-factory calls may refresh the
-	// template registers used to prepare the next synthetic actor.
-	trnsData.interceptRegisters = true;
+	// Natural actor-factory calls are needed only until the first valid template
+	// is captured. Keep that template stable across equipment reloads instead of
+	// replacing it with registers from an unrelated actor.
+	trnsData.interceptRegisters = !actor_spawn_template_ready;
 
 	queue_mutex.lock(); ////////////////////////////////////////////
 	// Actual actor spawning - just read from queue here.
