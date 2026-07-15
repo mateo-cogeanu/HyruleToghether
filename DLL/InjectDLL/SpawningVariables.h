@@ -153,6 +153,8 @@ int pending_delete_player = 0;
 uint32_t pending_delete_actor = 0;
 bool actor_spawn_template_ready = false;
 InstanceData actor_spawn_template{};
+int actor_spawn_template_r3 = 0;
+int actor_spawn_template_r5 = 0;
 
 struct CompletedAnimation
 {
@@ -411,13 +413,15 @@ void setupActor(PPCInterpreter_t* hCPU, TransferableData& trnsData, InstanceData
 	// Lets set any data that our params will reference:
 	// -------------------------------------------------
 
-	// Capture the actor-factory storage exactly once from the first proven-good
-	// natural template. After a direct equipment deletion, unrelated factory
-	// calls can overwrite F_R7 with short-lived actor memory; dereferencing that
-	// recaptured pointer crashed Linux during the replacement spawn. Reuse the
-	// stable host copy for every synthetic Jugador instead.
+	// Capture the complete actor-factory template exactly once from the first
+	// proven-good natural call. After a direct equipment deletion, unrelated
+	// factory calls can overwrite F_R3/F_R5/F_R7 with an old actor address, null,
+	// or short-lived actor memory. Reuse the stable host copy for every synthetic
+	// Jugador instead.
 	if (!actor_spawn_template_ready)
 	{
+		actor_spawn_template_r3 = trnsData.f_r3;
+		actor_spawn_template_r5 = trnsData.f_r5;
 		data_mutex.lock_shared(); //////////////////////////////////////////////////
 		memInstance->memory_readMemoryBE(
 			trnsData.f_r7,
@@ -426,6 +430,8 @@ void setupActor(PPCInterpreter_t* hCPU, TransferableData& trnsData, InstanceData
 		data_mutex.unlock_shared(); //==============================================
 		actor_spawn_template_ready = true;
 	}
+	trnsData.f_r3 = actor_spawn_template_r3;
+	trnsData.f_r5 = actor_spawn_template_r5;
 	memcpy(
 		&instData.actorStorage,
 		&actor_spawn_template.actorStorage,
