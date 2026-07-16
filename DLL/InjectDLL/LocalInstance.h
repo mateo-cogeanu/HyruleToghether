@@ -586,10 +586,11 @@ namespace MemoryAccess
 			result->Animation = this->Animation->get(__FUNCTION__);
 			result->Health = this->Health->get(__FUNCTION__);
 			result->AtkUp = this->AtkUp->get(__FUNCTION__);
-			// Preserve the raw value used by the established remote EventFlow. Its
-			// Hold/Equip mapping is intentionally handled by Player::set; inverting
-			// this byte makes charged weapon animations lose their upper-body AS.
-			result->IsEquipped = this->IsEquipped->get(__FUNCTION__);
+			// BOTW stores zero while Link is actively holding equipment. Convert the
+			// raw byte to the logical value expected by MultiplayerEvent's
+			// Demo_ChangeEquipState parameter (true -> Hold, false -> Equip), matching
+			// the legacy sender's UpdateIsEquipped implementation.
+			result->IsEquipped = !this->IsEquipped->get(__FUNCTION__);
 			result->Equipment = this->Equipment->getEquipment(__FUNCTION__);
 			result->Location = this->Location->get(__FUNCTION__);
 			result->Bomb = this->Bomb->get(__FUNCTION__);
