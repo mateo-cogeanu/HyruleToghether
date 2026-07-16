@@ -263,7 +263,12 @@ DTO::CloseCharacterDTO* Serializer::DeserializeCloseCharacter(std::vector<byte> 
 	copyData(&result->Animation, &input[0] + currentIndex, 4);
 	copyData(&result->Health, &input[0] + currentIndex, 4);
 	copyData(&result->AtkUp, &input[0] + currentIndex, 4);
-	copyData(&result->IsEquipped, &input[0] + currentIndex, 1);
+	byte equippedWireByte = 0;
+	copyData(&equippedWireByte, &input[0] + currentIndex, 1);
+	// Older native senders copied an invalid C++ bool representation directly
+	// from game memory. Treat every nonzero byte as true while keeping the DTO
+	// itself canonical on all platforms.
+	result->IsEquipped = equippedWireByte != 0;
 	//copyData(&result->Equipment, &input[0] + currentIndex, 13);
 	copyData(&result->Equipment.WType, &input[0] + currentIndex, 1);
 	copyData(&result->Equipment.Sword, &input[0] + currentIndex, 2);
@@ -286,7 +291,8 @@ DTO::CloseCharacterDTO* Serializer::DeserializeCloseCharacter(std::vector<byte> 
 		lastEquippedStateByPlayer[result->PlayerNumber] = result->IsEquipped;
 		Logging::LoggerService::LogInformation(
 			"Equipment wire receiver player " + std::to_string(result->PlayerNumber) +
-			": " + EquipmentWireValues(result->Equipment, result->IsEquipped) + ".",
+			": " + EquipmentWireValues(result->Equipment, result->IsEquipped) +
+			", wireByte=" + std::to_string(equippedWireByte) + ".",
 			__FUNCTION__);
 	}
 
@@ -568,7 +574,9 @@ void Serializer::SerializeCharacterData(DTO::ClientCharacterDTO* input)
 	copyData(&ClientData[0] + currentIndex, &input->Animation, 4);
 	copyData(&ClientData[0] + currentIndex, &input->Health, 4);
 	copyData(&ClientData[0] + currentIndex, &input->AtkUp, 4);
-	copyData(&ClientData[0] + currentIndex, &input->IsEquipped, 1);
+	// Never expose the in-memory representation of C++ bool on the wire.
+	const byte equippedWireByte = input->IsEquipped ? 1 : 0;
+	copyData(&ClientData[0] + currentIndex, &equippedWireByte, 1);
 	//copyData(&ClientData[0] + currentIndex, &input->Equipment, 13);
 	copyData(&ClientData[0] + currentIndex, &input->Equipment.WType, 1);
 	copyData(&ClientData[0] + currentIndex, &input->Equipment.Sword, 2);
