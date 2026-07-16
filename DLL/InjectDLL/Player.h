@@ -11,6 +11,7 @@
 #include "Vec3f_Operations.h"
 
 void queueRemoteAnimation(int playerNumber, uint64_t actorAddress, uint32_t animation);
+void queueRemoteEquipmentState(int playerNumber, uint64_t actorAddress, bool held);
 void queueRemoteActorRefresh(int playerNumber, uint64_t actorAddress);
 
 namespace MemoryAccess
@@ -173,11 +174,9 @@ namespace MemoryAccess
 				LastIsEquipped.exchange(PlayerData->IsEquipped, std::memory_order_acq_rel) !=
 				PlayerData->IsEquipped;
 
-			// Demo_ChangeEquipState is the first action in Jugador*_Update and the
-			// generated NPC flow may run only once on native Cemu. Prime its live
-			// parameter before the actor exists, just like the normal animation
-			// control above. Leaving Jugador*_Hold here during creation makes BOTW
-			// create the equipment children without ever attaching/showing them.
+			// Keep the EventFlow parameter current for the legacy path. Native Cemu
+			// does not schedule this flow reliably, so the live actor state is also
+			// dispatched directly below and after every replacement callback.
 			bool equipmentControlReady = HoldAddr != 0;
 #ifndef _WIN32
 			equipmentControlReady = ResolveNativeAnimationControls() && HoldAddr != 0;
@@ -186,7 +185,7 @@ namespace MemoryAccess
 			{
 				const std::string equipmentState = PlayerData->IsEquipped ? "Hold" : "Equip";
 				Memory::write_string(HoldAddr, equipmentState, 6, __FUNCTION__);
-				if (equippedStateChanged || this->baseAddr == 0)
+				if (equippedStateChanged)
 				{
 					std::stringstream stream;
 					stream << "Player " << PlayerNumber << " primed equipment state at 0x"
@@ -199,6 +198,11 @@ namespace MemoryAccess
 
 			if (this->baseAddr == 0)
 				return;
+
+#ifndef _WIN32
+			if (equippedStateChanged)
+				queueRemoteEquipmentState(PlayerNumber, baseAddr, PlayerData->IsEquipped);
+#endif
 
 			// Jugador's per-frame EventFlow is not scheduled by the generated NPC
 			// actor on native Cemu. Submit the received AS name to the actor's live

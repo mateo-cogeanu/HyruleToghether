@@ -120,6 +120,13 @@ static_assert(sizeof(InstanceData) == 256, "Spawn instance ring entry must remai
 		uint32_t actorAddress;
 	};
 
+	extern struct QueueEquipmentState {
+		int playerNumber;
+		uint32_t actorAddress;
+		bool held;
+		DWORD queuedAt;
+	};
+
 // ---------------------------------------------------------------------------------
 // This is an example function call.
 // - Feel free to expand / change -
@@ -142,13 +149,17 @@ enum class PendingDispatchKind
 	None,
 	Spawn,
 	ActorDelete,
-	Animation
+	Animation,
+	EquipmentState
 };
 
 PendingDispatchKind pending_dispatch_kind = PendingDispatchKind::None;
 int pending_animation_player = 0;
 uint32_t pending_animation_actor = 0;
 uint32_t pending_animation_hash = 0;
+int pending_equipment_player = 0;
+uint32_t pending_equipment_actor = 0;
+bool pending_equipment_held = false;
 int pending_delete_player = 0;
 uint32_t pending_delete_actor = 0;
 bool actor_spawn_template_ready = false;
@@ -180,6 +191,19 @@ std::map<char, bool> prevKeyStateMap; // Used for key press logic - keeps track 
 std::vector<QueueActor> queuedActors;
 std::vector<QueueActorDelete> queuedActorDeletes;
 std::vector<QueueAnimation> queuedAnimations;
+std::vector<QueueEquipmentState> queuedEquipmentStates;
+
+const char* PendingDispatchLabel(PendingDispatchKind kind)
+{
+	switch (kind)
+	{
+	case PendingDispatchKind::Spawn: return "Spawn";
+	case PendingDispatchKind::ActorDelete: return "Actor refresh";
+	case PendingDispatchKind::Animation: return "Animation";
+	case PendingDispatchKind::EquipmentState: return "Equipment state";
+	default: return "Dispatch";
+	}
+}
 
 // Setup raises every remote actor's delete flag before network data can enqueue
 // replacements. Keep actor callbacks in cleanup mode until the grace period is
@@ -317,6 +341,7 @@ void DespawnStalePlayerActors()
 		discardedRequests = previousSize - queuedActors.size();
 		queuedAnimations.clear();
 		queuedActorDeletes.clear();
+		queuedEquipmentStates.clear();
 		completedAnimations.clear();
 	}
 	Logging::LoggerService::LogInformation(
@@ -447,6 +472,27 @@ void queueRemoteAnimation(int playerNumber, uint64_t actorAddress, uint32_t anim
 	queuedAnimations.push_back({playerNumber, guestActorAddress, animation});
 }
 
+void queueRemoteEquipmentState(int playerNumber, uint64_t actorAddress, bool held)
+{
+	if (playerNumber < 1 || playerNumber > 32 || actorAddress == 0 ||
+		actorAddress > std::numeric_limits<uint32_t>::max())
+		return;
+
+	const uint32_t guestActorAddress = static_cast<uint32_t>(actorAddress);
+	std::unique_lock<std::shared_mutex> queueLock(queue_mutex);
+	for (QueueEquipmentState& queued : queuedEquipmentStates)
+	{
+		if (queued.playerNumber == playerNumber)
+		{
+			queued.actorAddress = guestActorAddress;
+			queued.held = held;
+			queued.queuedAt = GetTickCount();
+			return;
+		}
+	}
+	queuedEquipmentStates.push_back({playerNumber, guestActorAddress, held, GetTickCount()});
+}
+
 void queueRemoteActorRefresh(int playerNumber, uint64_t actorAddress)
 {
 	if (playerNumber < 1 || playerNumber > 32 || actorAddress == 0 ||
@@ -489,6 +535,14 @@ void resetRemoteAnimationDispatch(int playerNumber)
 			}),
 		queuedAnimations.end());
 	completedAnimations.erase(playerNumber);
+	queuedEquipmentStates.erase(
+		std::remove_if(
+			queuedEquipmentStates.begin(),
+			queuedEquipmentStates.end(),
+			[playerNumber](const QueueEquipmentState& queued) {
+				return queued.playerNumber == playerNumber;
+			}),
+		queuedEquipmentStates.end());
 }
 
 void setupActor(PPCInterpreter_t* hCPU, TransferableData& trnsData, InstanceData& instData, uint32_t startRingBuffer, uint32_t endRingBuffer, uint64_t baseAddress) {
@@ -784,6 +838,100 @@ bool setupAnimation(PPCInterpreter_t* hCPU, TransferableData& trnsData,
 	return true;
 }
 
+bool setupEquipmentState(PPCInterpreter_t* hCPU, TransferableData& trnsData,
+	uint32_t startRingBuffer, uint32_t endRingBuffer, uint64_t baseAddress)
+{
+	const QueueEquipmentState queued = queuedEquipmentStates.front();
+	const auto player = Instances::PlayerList.find(queued.playerNumber);
+	if (player == Instances::PlayerList.end() ||
+		player->second->baseAddr != queued.actorAddress)
+	{
+		queuedEquipmentStates.erase(queuedEquipmentStates.begin());
+		return false;
+	}
+
+	// ChangeWeaponEquipState::oneShot_ notifies the actor after its equipment
+	// children have finished creation. Avoid racing the callback that queued us.
+	if (static_cast<DWORD>(GetTickCount() - queued.queuedAt) < 100)
+		return false;
+
+	uint32_t animationController = 0;
+	std::string pointerFailure;
+	if (!Memory::TryReadBigEndian4BytesOffset(
+			static_cast<uint64_t>(queued.actorAddress) + 0x394,
+			animationController,
+			&pointerFailure) ||
+		animationController == 0)
+	{
+		Logging::LoggerService::LogWarning(
+			"Player " + std::to_string(queued.playerNumber) +
+			" equipment-state controller is not ready" +
+			(pointerFailure.empty() ? "." : ": " + pointerFailure + "."),
+			__FUNCTION__);
+		queuedEquipmentStates.erase(queuedEquipmentStates.begin());
+		return false;
+	}
+
+	const uint32_t stringLocation = static_cast<uint32_t>(trnsData.ringPtr);
+	const uint32_t safeStringLocation = stringLocation + 64;
+	const uint32_t actorState = queued.held ? 0u : 1u;
+	{
+		std::unique_lock<std::shared_mutex> dataLock(data_mutex);
+		memInstance->memory_writeMemory(stringLocation, static_cast<byte>(0), baseAddress);
+		memInstance->memory_writeMemoryBE(safeStringLocation, stringLocation, baseAddress);
+		memInstance->memory_writeMemoryBE(
+			safeStringLocation + 4, uint32_t(0x10263910), baseAddress);
+		memInstance->memory_writeMemoryBE(
+			queued.actorAddress + 0xb94, actorState, baseAddress);
+	}
+
+	// Wii U ChangeWeaponEquipState::oneShot_ writes actor+0xb94 (Hold=0,
+	// Equip=1), then calls this controller notification with message 0x2c and
+	// an empty sead::SafeString for NPC-profile actors. Dispatch that exact
+	// operation instead of relying on the unscheduled MultiplayerEvent flow.
+	trnsData.f_r3 = static_cast<int>(animationController);
+	trnsData.f_r4 = 0x2c;
+	trnsData.f_r5 = static_cast<int>(safeStringLocation);
+	trnsData.f_r6 = 0;
+	trnsData.f_r7 = 0;
+	trnsData.f_r8 = 0;
+	trnsData.f_r9 = 0;
+	trnsData.f_r10 = 0;
+	hCPU->gpr[3] = animationController;
+	hCPU->gpr[4] = 0x2c;
+	hCPU->gpr[5] = safeStringLocation;
+	for (int reg = 6; reg <= 10; ++reg)
+		hCPU->gpr[reg] = 0;
+
+	trnsData.fnAddr = 0x0370ee34;
+	trnsData.dispatchState = 1;
+	trnsData.enabled = true;
+	trnsData.interceptRegisters = false;
+	pending_spawn_sequence = ++spawn_request_sequence;
+	pending_spawn_name = queued.held ? "Hold" : "Equip";
+	pending_dispatch_kind = PendingDispatchKind::EquipmentState;
+	pending_equipment_player = queued.playerNumber;
+	pending_equipment_actor = queued.actorAddress;
+	pending_equipment_held = queued.held;
+	last_observed_dispatch_state = -1;
+
+	std::stringstream stream;
+	stream << "Submitted direct equipment state for player " << queued.playerNumber
+		<< ": actor=0x" << std::hex << queued.actorAddress
+		<< ", controller=0x" << animationController
+		<< ", state=" << (queued.held ? "Hold(0)" : "Equip(1)")
+		<< ", readback="
+		<< Memory::read_bigEndian4BytesOffset(queued.actorAddress + 0xb94, __FUNCTION__)
+		<< ".";
+	Logging::LoggerService::LogInformation(stream.str(), __FUNCTION__);
+
+	trnsData.ringPtr += sizeof(InstanceData);
+	if (trnsData.ringPtr >= static_cast<int>(endRingBuffer))
+		trnsData.ringPtr = startRingBuffer;
+	queuedEquipmentStates.erase(queuedEquipmentStates.begin());
+	return true;
+}
+
 bool setupActorDelete(PPCInterpreter_t* hCPU, TransferableData& trnsData)
 {
 	const QueueActorDelete queued = queuedActorDeletes.front();
@@ -877,9 +1025,7 @@ void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBu
 	if (trnsData.enabled) {
 		if (trnsData.dispatchState != last_observed_dispatch_state) {
 			last_observed_dispatch_state = trnsData.dispatchState;
-			const std::string dispatchType = pending_dispatch_kind == PendingDispatchKind::Animation ?
-				"Animation" : pending_dispatch_kind == PendingDispatchKind::ActorDelete ?
-				"Actor refresh" : "Spawn";
+			const std::string dispatchType = PendingDispatchLabel(pending_dispatch_kind);
 			if (trnsData.dispatchState == 1) {
 				Logging::LoggerService::LogDebug(
 					dispatchType + " request " + std::to_string(pending_spawn_sequence) +
@@ -900,9 +1046,7 @@ void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBu
 		return;
 	}
 	if (pending_spawn_sequence != 0) {
-		const std::string dispatchType = pending_dispatch_kind == PendingDispatchKind::Animation ?
-			"Animation" : pending_dispatch_kind == PendingDispatchKind::ActorDelete ?
-			"Actor refresh" : "Spawn";
+		const std::string dispatchType = PendingDispatchLabel(pending_dispatch_kind);
 		Logging::LoggerService::LogDebug(
 			dispatchType + " request " + std::to_string(pending_spawn_sequence) +
 			" (" + pending_spawn_name + ") returned from BOTW.",
@@ -954,12 +1098,24 @@ void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBu
 					__FUNCTION__);
 			}
 		}
+		else if (pending_dispatch_kind == PendingDispatchKind::EquipmentState)
+		{
+			std::stringstream equipmentStream;
+			equipmentStream << "Direct equipment state returned for player "
+				<< pending_equipment_player << " at actor 0x" << std::hex
+				<< pending_equipment_actor << ": "
+				<< (pending_equipment_held ? "Hold" : "Equip") << ".";
+			Logging::LoggerService::LogInformation(equipmentStream.str(), __FUNCTION__);
+		}
 		pending_spawn_sequence = 0;
 		pending_spawn_name.clear();
 		pending_dispatch_kind = PendingDispatchKind::None;
 		pending_animation_player = 0;
 		pending_animation_actor = 0;
 		pending_animation_hash = 0;
+		pending_equipment_player = 0;
+		pending_equipment_actor = 0;
+		pending_equipment_held = false;
 		pending_delete_player = 0;
 		pending_delete_actor = 0;
 		last_observed_dispatch_state = -1;
@@ -980,6 +1136,14 @@ void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBu
 	}
 	else if (!queuedActorDeletes.empty()) {
 		setupActorDelete(hCPU, trnsData);
+	}
+	else if (!queuedEquipmentStates.empty()) {
+		setupEquipmentState(
+			hCPU,
+			trnsData,
+			startRingBuffer,
+			endRingBuffer,
+			baseAddress);
 	}
 	else if (!queuedAnimations.empty()) {
 		setupAnimation(
@@ -1166,6 +1330,10 @@ void OnActorCreate(PPCInterpreter_t* hCPU)
 		player->second->Equipment->SetWeapons(hCPU->gpr[3]);
 		player->second->Equipment->SetArmor();
 		player->second->Bumii->setAddress(hCPU->gpr[3]);
+		queueRemoteEquipmentState(
+			spawnedPlayer,
+			hCPU->gpr[3],
+			player->second->LastIsEquipped.load(std::memory_order_acquire));
 
 		Logging::LoggerService::LogDebug("Player " + std::to_string(spawnedPlayer) + " setup correctly.", __FUNCTION__);
 		if (requiresEquipmentReload)
@@ -1602,7 +1770,7 @@ void init() {
 	osLib_registerHLEFunction("multiplayer", "WeatherSync", static_cast<void (*) (PPCInterpreter_t*)>(&WeatherFn));
 	osLib_registerHLEFunction("ukl_actorinterceptor", "OnActorCreate", static_cast<void (*) (PPCInterpreter_t*)>(&OnActorCreate));
 	Logging::LoggerService::LogInformation(
-		"Equipment synchronization runtime: pre-spawn-equip-state-v5.",
+		"Equipment synchronization runtime: direct-live-equip-state-v6.",
 		__FUNCTION__);
 	// Clear native actor state only after BOTW actually erases the actor. The
 	// earlier deleteLater hook can run inside the shared PPC dispatcher and must
