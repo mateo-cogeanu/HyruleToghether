@@ -45,7 +45,13 @@ fi
 
 build_root="$root/Build/launcher/$target"
 staging="$build_root/staging"
-rm -rf "$staging" "$build_root/dist" "$build_root/work"
+for generated in "$staging" "$build_root/dist" "$build_root/work"; do
+  if [[ -e "$generated" ]]; then
+    stale="$generated.previous-build.$$"
+    mv "$generated" "$stale"
+    rm -rf "$stale"
+  fi
+done
 mkdir -p "$staging/runtime/cemu" "$staging/runtime/client" "$staging/runtime/server" "$staging/runtime/mod" "$staging/runtime/tools"
 MILKBAR_CEMU_INSTALL_DIR="$staging/runtime/cemu" "$root/scripts/install-patched-cemu.sh" "$target"
 client_source="$root/Build/cross-platform/libMilkBarClient.$client_ext"
@@ -135,10 +141,16 @@ if [[ "$host_os" == "Darwin" ]]; then
   app="$build_root/dist/Hyrule Together.app"
   runtime="$app/Contents/Resources/runtime"
   mkdir -p "$runtime"
-  ditto "$staging/runtime" "$runtime"
-  codesign --force --deep --sign - "$app"
-  ditto -c -k --sequesterRsrc --keepParent "$app" "$build_root/HyruleTogether-$target.zip"
-  echo "Bundled launcher: $app"
+	ditto "$staging/runtime" "$runtime"
+	codesign --force --deep --sign - "$app"
+	# Keep a single obvious top-level app for manual testing. Older builds left
+	# this path stale while only refreshing dist/, which could launch an old
+	# client and graphic pack even after a successful rebuild.
+	canonical_app="$build_root/Hyrule Together.app"
+	rm -rf "$canonical_app"
+	ditto "$app" "$canonical_app"
+	ditto -c -k --sequesterRsrc --keepParent "$canonical_app" "$build_root/HyruleTogether-$target.zip"
+	echo "Bundled launcher: $canonical_app"
 else
   package="$build_root/dist/Hyrule Together"
   cp -R "$staging/runtime" "$package/runtime"
