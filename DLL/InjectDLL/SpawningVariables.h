@@ -1040,6 +1040,13 @@ void OnActorCreate(PPCInterpreter_t* hCPU)
 
 	std::string name = Memory::read_string(Main::baseAddr + hCPU->gpr[3] + 0x10, 100, __FUNCTION__);
 	LogEquipmentChildCreation(name, hCPU->gpr[3]);
+	if (name.rfind("Weapon_", 0) == 0)
+	{
+		std::stringstream weaponStream;
+		weaponStream << "Observed weapon actor " << name << " at guest 0x"
+			<< std::hex << hCPU->gpr[3] << ".";
+		Logging::LoggerService::LogInformation(weaponStream.str(), __FUNCTION__);
+	}
 	static std::atomic<int> actorHookSamples{0};
 	int sample = actorHookSamples.fetch_add(1, std::memory_order_relaxed);
 	if (sample < 32)
@@ -1553,7 +1560,7 @@ void init() {
 	osLib_registerHLEFunction("multiplayer", "WeatherSync", static_cast<void (*) (PPCInterpreter_t*)>(&WeatherFn));
 	osLib_registerHLEFunction("ukl_actorinterceptor", "OnActorCreate", static_cast<void (*) (PPCInterpreter_t*)>(&OnActorCreate));
 	Logging::LoggerService::LogInformation(
-		"Equipment synchronization runtime: factory-child-resolver-v2.",
+		"Equipment synchronization runtime: internal-factory-child-resolver-v3.",
 		__FUNCTION__);
 	// Clear native actor state only after BOTW actually erases the actor. The
 	// earlier deleteLater hook can run inside the shared PPC dispatcher and must

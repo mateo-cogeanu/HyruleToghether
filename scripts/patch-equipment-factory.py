@@ -13,28 +13,24 @@ def main() -> int:
     path = Path(sys.argv[1])
     text = path.read_text(encoding="utf-8")
     marker = "; MILKBAR_EQUIPMENT_FACTORY_RESOLVER"
-    if marker in text:
+    internal_marker = "; MILKBAR_INTERNAL_EQUIPMENT_FACTORY_RESOLVER_V3"
+    if internal_marker in text:
         return 0
 
-    symbol_anchor = 'HLEName:\n.string "fnCallMain"\n'
-    symbol_replacement = (
-        symbol_anchor
-        + "\nEquipmentResolverName:\n"
-        + '.string "ResolveEquipmentActor"\n\n'
-        + "EquipmentResolverLoc:\n"
-        + ".int 0\n"
-    )
-    if text.count(symbol_anchor) != 1:
-        raise RuntimeError("Expected one spawn HLE name block")
-    text = text.replace(symbol_anchor, symbol_replacement, 1)
+    if marker not in text:
+        symbol_anchor = 'HLEName:\n.string "fnCallMain"\n'
+        symbol_replacement = (
+            symbol_anchor
+            + "\nEquipmentResolverName:\n"
+            + '.string "ResolveEquipmentActor"\n\n'
+            + "EquipmentResolverLoc:\n"
+            + ".int 0\n"
+        )
+        if text.count(symbol_anchor) != 1:
+            raise RuntimeError("Expected one spawn HLE name block")
+        text = text.replace(symbol_anchor, symbol_replacement, 1)
 
-    hook_anchor = "GetTargetFnRegisters:\n\n; Back up registers we use"
-    hook_replacement = (
-        "GetTargetFnRegisters:\n\n"
-        f"{marker}\n"
-        "; NpcEquipment reaches this actor-factory entry before BOTW resolves\n"
-        "; the requested child actor. Let the native client replace only the\n"
-        "; unique Jugador equipment placeholder buffer while it is still live.\n"
+    resolver_call = (
         "addi r1, r1, -8\n"
         "stw r3, 4(r1)\n"
         "mflr r3\n"
@@ -61,12 +57,39 @@ def main() -> int:
         "lwz r3, 0(r1)\n"
         "mtlr r3\n"
         "lwz r3, 4(r1)\n"
-        "addi r1, r1, 8\n\n"
-        "; Back up registers we use"
+        "addi r1, r1, 8\n"
     )
-    if text.count(hook_anchor) != 1:
-        raise RuntimeError("Expected one actor-factory register hook")
-    path.write_text(text.replace(hook_anchor, hook_replacement, 1), encoding="utf-8")
+
+    if marker not in text:
+        hook_anchor = "GetTargetFnRegisters:\n\n; Back up registers we use"
+        hook_replacement = (
+            "GetTargetFnRegisters:\n\n"
+            f"{marker}\n"
+            "; Resolve placeholders submitted through the public ActorCreator wrapper.\n"
+            + resolver_call
+            + "\n; Back up registers we use"
+        )
+        if text.count(hook_anchor) != 1:
+            raise RuntimeError("Expected one actor-factory register hook")
+        text = text.replace(hook_anchor, hook_replacement, 1)
+
+    internal_anchor = "0x037b6040 = b GetTargetFnRegisters\n"
+    internal_hook = (
+        "; NpcEquipment bypasses the public wrapper above and enters ActorCreator's\n"
+        "; internal createActor_ wrapper at 0x037b5be0. At this point r4 is the\n"
+        "; requested child name and has not yet been looked up.\n"
+        f"{internal_marker}\n"
+        "0x037b5be0 = b EquipmentChildCreateHook\n\n"
+        "EquipmentChildCreateHook:\n"
+        + resolver_call
+        + "; Execute the replaced createActor_ prologue and return to the next instruction.\n"
+        "stwu r1, -40(r1)\n"
+        "b 0x037b5be4\n\n"
+        + internal_anchor
+    )
+    if text.count(internal_anchor) != 1:
+        raise RuntimeError("Expected one public actor-factory hook assignment")
+    path.write_text(text.replace(internal_anchor, internal_hook, 1), encoding="utf-8")
     return 0
 
 
