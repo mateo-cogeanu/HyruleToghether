@@ -374,6 +374,7 @@ void queueActor(int playerNumber, float Position[3])
 	if (activePlayer != Instances::PlayerList.end() && activePlayer->second->baseAddr != 0)
 	{
 		activePlayer->second->SpawnPending.store(false, std::memory_order_release);
+		activePlayer->second->SpawnCallbackExpected.store(false, std::memory_order_release);
 		Logging::LoggerService::LogDebug(
 			"Discarded queued player " + std::to_string(playerNumber) +
 			" creation because its replacement actor already exists.",
@@ -499,6 +500,7 @@ void setupActor(PPCInterpreter_t* hCPU, TransferableData& trnsData, InstanceData
 		if (activePlayer != Instances::PlayerList.end() && activePlayer->second->baseAddr != 0)
 		{
 			activePlayer->second->SpawnPending.store(false, std::memory_order_release);
+			activePlayer->second->SpawnCallbackExpected.store(false, std::memory_order_release);
 			queuedActors.erase(queuedActors.begin());
 			Logging::LoggerService::LogDebug(
 				"Cancelled player " + std::to_string(queuedPlayer) +
@@ -624,6 +626,12 @@ void setupActor(PPCInterpreter_t* hCPU, TransferableData& trnsData, InstanceData
 	pending_spawn_sequence = ++spawn_request_sequence;
 	pending_spawn_name = qAct.Name;
 	pending_dispatch_kind = PendingDispatchKind::Spawn;
+	if (queuedPlayer != 0)
+	{
+		const auto activePlayer = Instances::PlayerList.find(queuedPlayer);
+		if (activePlayer != Instances::PlayerList.end())
+			activePlayer->second->SpawnCallbackExpected.store(false, std::memory_order_release);
+	}
 	last_observed_dispatch_state = -1;
 
 	trnsData.enabled = true; // This tells the assembly patch to trigger one function call
@@ -906,6 +914,23 @@ void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBu
 				pending_animation_actor,
 				pending_animation_hash};
 		}
+		else if (pending_dispatch_kind == PendingDispatchKind::Spawn)
+		{
+			int spawnedPlayer = 0;
+			if (TryParseRemotePlayerActor(pending_spawn_name, spawnedPlayer))
+			{
+				const auto player = Instances::PlayerList.find(spawnedPlayer);
+				if (player != Instances::PlayerList.end() &&
+					player->second->SpawnPending.load(std::memory_order_acquire))
+				{
+					player->second->SpawnCallbackExpected.store(true, std::memory_order_release);
+					Logging::LoggerService::LogDebug(
+						"Spawn dispatch completed for player " + std::to_string(spawnedPlayer) +
+						"; one matching actor callback is now expected.",
+						__FUNCTION__);
+				}
+			}
+		}
 		else if (pending_dispatch_kind == PendingDispatchKind::ActorDelete)
 		{
 			// deleteLater has returned to the wrapper, so the old actor must no
@@ -918,6 +943,7 @@ void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBu
 				player->second->baseAddr == pending_delete_actor)
 			{
 				player->second->SpawnPending.store(false, std::memory_order_release);
+				player->second->SpawnCallbackExpected.store(false, std::memory_order_release);
 				player->second->InvalidateNativeAnimationControls();
 				resetRemoteAnimationDispatch(pending_delete_player);
 				player->second->setAddress(0);
@@ -1099,6 +1125,21 @@ void OnActorCreate(PPCInterpreter_t* hCPU)
 			return;
 		}
 
+		// The actor factory can emit a delayed duplicate create callback after a
+		// direct equipment deletion, even when the deleted and replacement actors
+		// reuse the same guest address. Address checks cannot distinguish those
+		// generations. Adopt an actor only after the matching synthetic spawn call
+		// has returned and published this one-shot token.
+		if (!player->second->SpawnCallbackExpected.exchange(false, std::memory_order_acq_rel))
+		{
+			std::stringstream staleCreateStream;
+			staleCreateStream << "Ignored unpaired player " << spawnedPlayer
+				<< " create callback at guest 0x" << std::hex << hCPU->gpr[3]
+				<< "; no completed spawn dispatch is awaiting adoption.";
+			Logging::LoggerService::LogWarning(staleCreateStream.str(), __FUNCTION__);
+			return;
+		}
+
 		std::stringstream stream;
 		stream << "Spawned player " << spawnedPlayer << " at: " << std::hex << Main::baseAddr + hCPU->gpr[3] << ". Setting up addresses.";
 		Logging::LoggerService::LogDebug(stream.str(), __FUNCTION__);
@@ -1255,6 +1296,7 @@ void OnActorErase(PPCInterpreter_t* hCPU)
 		else
 			player->second->Status->set(0, __FUNCTION__);
 		player->second->SpawnPending.store(false, std::memory_order_release);
+		player->second->SpawnCallbackExpected.store(false, std::memory_order_release);
 		player->second->InvalidateNativeAnimationControls();
 		resetRemoteAnimationDispatch(spawnedPlayer);
 		player->second->setAddress(0);
@@ -1560,7 +1602,7 @@ void init() {
 	osLib_registerHLEFunction("multiplayer", "WeatherSync", static_cast<void (*) (PPCInterpreter_t*)>(&WeatherFn));
 	osLib_registerHLEFunction("ukl_actorinterceptor", "OnActorCreate", static_cast<void (*) (PPCInterpreter_t*)>(&OnActorCreate));
 	Logging::LoggerService::LogInformation(
-		"Equipment synchronization runtime: internal-factory-child-resolver-v3.",
+		"Equipment synchronization runtime: spawn-callback-token-v4.",
 		__FUNCTION__);
 	// Clear native actor state only after BOTW actually erases the actor. The
 	// earlier deleteLater hook can run inside the shared PPC dispatcher and must

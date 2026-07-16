@@ -199,6 +199,7 @@ void Player::PThread()
 				else
 				{
 					this->SpawnPending.store(false, std::memory_order_release);
+					this->SpawnCallbackExpected.store(false, std::memory_order_release);
 					Logging::LoggerService::LogWarning(
 						"Remote actor spawn callback timed out; allowing one retry.", __FUNCTION__);
 				}
@@ -316,6 +317,7 @@ void Player::PThread()
 				}
 
 				this->SpawnRequestedAt = GetTickCount();
+				this->SpawnCallbackExpected.store(false, std::memory_order_release);
 				this->SpawnPending.store(true, std::memory_order_release);
 				GameInstance->RequestCreate(this->PlayerNumber, this->LastServerPosition);
 				this->Exists->set(false, __FUNCTION__);

@@ -63,6 +63,7 @@ namespace MemoryAccess
 		std::thread pThread;
 		std::atomic<bool> RunThread{ false };
 		std::atomic<bool> SpawnPending{ false };
+		std::atomic<bool> SpawnCallbackExpected{ false };
 		std::atomic<bool> EquipmentRefreshPending{ false };
 		std::atomic<bool> LastIsEquipped{ false };
 		DWORD SpawnRequestedAt = 0;
@@ -399,6 +400,7 @@ namespace MemoryAccess
 			//this->Delete->set(true, __FUNCTION__);
 			this->Status->set(DELETE_STATUS, __FUNCTION__);
 			this->RunThread.store(false, std::memory_order_release);
+			this->SpawnCallbackExpected.store(false, std::memory_order_release);
 			this->EquipmentRefreshPending.store(false, std::memory_order_release);
 			if (pThread.joinable())
 				pThread.join();
@@ -412,6 +414,7 @@ namespace MemoryAccess
 			// into the title, then clear host-side pointers only.
 			connected = false;
 			this->RunThread.store(false, std::memory_order_release);
+			this->SpawnCallbackExpected.store(false, std::memory_order_release);
 			this->EquipmentRefreshPending.store(false, std::memory_order_release);
 			if (pThread.joinable())
 				pThread.join();
