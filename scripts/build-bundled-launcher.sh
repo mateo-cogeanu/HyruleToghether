@@ -39,9 +39,9 @@ fi
 "$root/scripts/build-native.sh"
 "$root/scripts/build-ukmm.sh" "$target"
 "$root/scripts/build-model-builder.sh" "$server_rid"
-if [[ ! -x "$root/Build/server/$server_rid/MBL.DedicatedServer" ]]; then
-  "$root/scripts/build-server.sh" "$server_rid"
-fi
+# Protocol changes span the native client and dedicated server. Always refresh
+# both halves so a bundle cannot silently ship a stale server from an older run.
+"$root/scripts/build-server.sh" "$server_rid"
 
 build_root="$root/Build/launcher/$target"
 staging="$build_root/staging"

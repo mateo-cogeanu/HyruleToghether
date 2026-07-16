@@ -66,7 +66,7 @@ namespace MemoryAccess
 		std::atomic<bool> SpawnPending{ false };
 		std::atomic<bool> SpawnCallbackExpected{ false };
 		std::atomic<bool> EquipmentRefreshPending{ false };
-		std::atomic<bool> LastIsEquipped{ false };
+		std::atomic<byte> LastEquipmentState{ 0 };
 		DWORD SpawnRequestedAt = 0;
 #ifndef _WIN32
 		std::atomic<bool> AnimationControlsResolved{ false };
@@ -170,9 +170,13 @@ namespace MemoryAccess
 			// this snapshot while constructing the actor, so its first visible frame
 			// already has the remote player's current armor and weapons.
 			const bool equipmentChanged = Equipment->Compare(PlayerData->Equipment);
-			const bool equippedStateChanged =
-				LastIsEquipped.exchange(PlayerData->IsEquipped, std::memory_order_acq_rel) !=
-				PlayerData->IsEquipped;
+			const byte previousEquipmentState = LastEquipmentState.exchange(
+				PlayerData->EquipmentState, std::memory_order_acq_rel);
+			const bool equipmentStateChanged =
+				previousEquipmentState != PlayerData->EquipmentState;
+			const bool heldStateChanged =
+				(previousEquipmentState != 0) != (PlayerData->EquipmentState != 0);
+			const bool equipmentHeld = PlayerData->EquipmentState != 0;
 
 			// Keep the EventFlow parameter current for the legacy path. Native Cemu
 			// does not schedule this flow reliably, so the live actor state is also
@@ -183,15 +187,16 @@ namespace MemoryAccess
 #endif
 			if (!isPaused && equipmentControlReady)
 			{
-				const std::string equipmentState = PlayerData->IsEquipped ? "Hold" : "Equip";
+				const std::string equipmentState = equipmentHeld ? "Hold" : "Equip";
 				Memory::write_string(HoldAddr, equipmentState, 6, __FUNCTION__);
-				if (equippedStateChanged)
+				if (equipmentStateChanged)
 				{
 					std::stringstream stream;
 					stream << "Player " << PlayerNumber << " primed equipment state at 0x"
 						<< std::hex << HoldAddr << " before actor update: requested="
 						<< equipmentState << ", readback="
-						<< Memory::read_string(HoldAddr, 6, __FUNCTION__) << ".";
+						<< Memory::read_string(HoldAddr, 6, __FUNCTION__)
+						<< ", raw=0x" << static_cast<int>(PlayerData->EquipmentState) << ".";
 					Logging::LoggerService::LogInformation(stream.str(), __FUNCTION__);
 				}
 			}
@@ -200,8 +205,8 @@ namespace MemoryAccess
 				return;
 
 #ifndef _WIN32
-			if (equippedStateChanged)
-				queueRemoteEquipmentState(PlayerNumber, baseAddr, PlayerData->IsEquipped);
+			if (heldStateChanged)
+				queueRemoteEquipmentState(PlayerNumber, baseAddr, equipmentHeld);
 #endif
 
 			// Jugador's per-frame EventFlow is not scheduled by the generated NPC

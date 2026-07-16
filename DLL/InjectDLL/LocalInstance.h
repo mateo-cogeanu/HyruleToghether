@@ -591,11 +591,12 @@ namespace MemoryAccess
 			result->Animation = this->Animation->get(__FUNCTION__);
 			result->Health = this->Health->get(__FUNCTION__);
 			result->AtkUp = this->AtkUp->get(__FUNCTION__);
-			// Cross-platform visual verification proves that Link's controller flag
-			// is nonzero while equipment is held and zero while it is sheathed.
+			// Cross-platform visual verification proves that Link's controller byte
+			// is nonzero while equipment is held and zero while it is sheathed. Keep
+			// the complete byte so later captures can distinguish independent modes.
 			const byte equipmentControllerState =
 				this->EquipmentControllerState->get(__FUNCTION__);
-			result->IsEquipped = equipmentControllerState != 0;
+			result->EquipmentState = equipmentControllerState;
 			static int lastLoggedEquipmentControllerState = -1;
 			if (equipmentControllerState != lastLoggedEquipmentControllerState)
 			{
@@ -604,9 +605,52 @@ namespace MemoryAccess
 				stream << "Local equipment controller state: address=0x" << std::hex
 					<< this->EquipmentControllerState->address << ", raw=0x"
 					<< static_cast<int>(equipmentControllerState) << std::dec
-					<< ", IsEquipped=" << (result->IsEquipped ? 1 : 0) << ".";
+					<< ", normalized="
+					<< (equipmentControllerState != 0 ? "held" : "sheathed") << ".";
 				Logging::LoggerService::LogInformation(
 					stream.str(), __FUNCTION__);
+			}
+
+			// Diagnostic-only observation window around the verified byte. No value
+			// from this window drives game behavior. Change-only output provides the
+			// evidence required before assigning shield/bow meanings to nearby fields.
+			constexpr int controllerContextRadius = 8;
+			const uint64_t contextAddress =
+				this->EquipmentControllerState->address - controllerContextRadius;
+			const std::vector<byte> controllerContext = Memory::read_bytes(
+				contextAddress, controllerContextRadius * 2 + 1, __FUNCTION__);
+			static uint64_t lastControllerContextAddress = 0;
+			static std::vector<byte> lastControllerContext;
+			if (lastControllerContextAddress != contextAddress ||
+				lastControllerContext.size() != controllerContext.size())
+			{
+				lastControllerContextAddress = contextAddress;
+				lastControllerContext = controllerContext;
+				std::stringstream stream;
+				const uint64_t guestAddress = contextAddress - Memory::getBaseAddress();
+				stream << "Equipment controller context baseline: guest=0x" << std::hex
+					<< guestAddress << ", host=0x" << contextAddress << ", bytes=";
+				for (byte value : controllerContext)
+					stream << std::setw(2) << std::setfill('0') << static_cast<int>(value);
+				stream << ".";
+				Logging::LoggerService::LogInformation(stream.str(), __FUNCTION__);
+			}
+			else
+			{
+				for (size_t index = 0; index < controllerContext.size(); ++index)
+				{
+					if (controllerContext[index] == lastControllerContext[index])
+						continue;
+					const uint64_t hostAddress = contextAddress + index;
+					const uint64_t guestAddress = hostAddress - Memory::getBaseAddress();
+					std::stringstream stream;
+					stream << "Equipment controller context changed: guest=0x" << std::hex
+						<< guestAddress << ", host=0x" << hostAddress
+						<< ", before=0x" << static_cast<int>(lastControllerContext[index])
+						<< ", after=0x" << static_cast<int>(controllerContext[index]) << ".";
+					Logging::LoggerService::LogInformation(stream.str(), __FUNCTION__);
+				}
+				lastControllerContext = controllerContext;
 			}
 			result->Equipment = this->Equipment->getEquipment(__FUNCTION__);
 			result->Location = this->Location->get(__FUNCTION__);

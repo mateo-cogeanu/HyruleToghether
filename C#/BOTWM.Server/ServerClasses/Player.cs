@@ -1,4 +1,5 @@
-﻿using BOTWM.Server.DataTypes;
+﻿using BOTW.Logging;
+using BOTWM.Server.DataTypes;
 using BOTWM.Server.DTO;
 using BOTWM.Server.HelperTypes;
 
@@ -17,7 +18,7 @@ namespace BOTWM.Server.ServerClasses
         public int Animation;
         public int Health;
         public float AtkUp;
-        public bool IsEquipped;
+        public byte EquipmentState;
         public CharacterEquipment Equipment;
         public CharacterLocation Location;
         public Vec3f Bomb;
@@ -27,6 +28,7 @@ namespace BOTWM.Server.ServerClasses
         public byte ModelType;
         public string Model;
         public BumiiDTO MiiData;
+        private byte LastLoggedEquipmentState = byte.MaxValue;
 
         public Player(byte playerNumber)
         {
@@ -43,6 +45,13 @@ namespace BOTWM.Server.ServerClasses
         public void Update(ClientPlayerDTO userData)
         {
             this.Map(userData);
+            if (LastLoggedEquipmentState != userData.EquipmentState)
+            {
+                LastLoggedEquipmentState = userData.EquipmentState;
+                Logger.LogDebug(
+                    $"Equipment relay player {PlayerNumber}: raw=0x{EquipmentState:X2}, " +
+                    $"normalized={(EquipmentState == 0 ? "sheathed" : "held")}.");
+            }
         }
         
     }

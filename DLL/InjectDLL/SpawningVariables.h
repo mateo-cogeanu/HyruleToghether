@@ -300,7 +300,7 @@ void ResolveEquipmentActor(PPCInterpreter_t* hCPU)
 		<< ": placeholder=" << placeholder << ", requested="
 		<< (resource.empty() ? "none" : resource) << ", readback=" << readback
 		<< ", state="
-		<< (player->second->LastIsEquipped.load(std::memory_order_acquire) ? "Hold" : "Equip")
+		<< (player->second->LastEquipmentState.load(std::memory_order_acquire) != 0 ? "Hold" : "Equip")
 		<< ".";
 	Logging::LoggerService::LogInformation(stream.str(), __FUNCTION__);
 }
@@ -1333,7 +1333,7 @@ void OnActorCreate(PPCInterpreter_t* hCPU)
 		queueRemoteEquipmentState(
 			spawnedPlayer,
 			hCPU->gpr[3],
-			player->second->LastIsEquipped.load(std::memory_order_acquire));
+			player->second->LastEquipmentState.load(std::memory_order_acquire) != 0);
 
 		Logging::LoggerService::LogDebug("Player " + std::to_string(spawnedPlayer) + " setup correctly.", __FUNCTION__);
 		if (requiresEquipmentReload)
@@ -1770,7 +1770,7 @@ void init() {
 	osLib_registerHLEFunction("multiplayer", "WeatherSync", static_cast<void (*) (PPCInterpreter_t*)>(&WeatherFn));
 	osLib_registerHLEFunction("ukl_actorinterceptor", "OnActorCreate", static_cast<void (*) (PPCInterpreter_t*)>(&OnActorCreate));
 	Logging::LoggerService::LogInformation(
-		"Equipment synchronization runtime: corrected-controller-polarity-v9.",
+		"Equipment synchronization runtime: raw-controller-relay-v10.",
 		__FUNCTION__);
 	// Clear native actor state only after BOTW actually erases the actor. The
 	// earlier deleteLater hook can run inside the shared PPC dispatcher and must

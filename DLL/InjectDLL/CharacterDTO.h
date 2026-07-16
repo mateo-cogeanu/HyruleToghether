@@ -23,7 +23,10 @@ namespace DTO
 		int Animation;
 		int Health;
 		float AtkUp;
-		bool IsEquipped;
+		// Full raw byte from Link's verified equipment-controller field. Zero is
+		// sheathed and nonzero is held; retaining the remaining bits lets matching
+		// builds diagnose shield/bow submodes without changing the wire size.
+		byte EquipmentState;
 		CharacterEquipment Equipment;
 		CharacterLocation Location;
 		Vec3f Bomb;
@@ -46,7 +49,7 @@ namespace DTO
 		int Animation;
 		int Health;
 		float AtkUp;
-		bool IsEquipped;
+		byte EquipmentState;
 		CharacterEquipment Equipment;
 		CharacterLocation Location;
 		Vec3f Bomb;

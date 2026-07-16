@@ -21,7 +21,7 @@ namespace BOTWM.Server.DTO
         public int Animation;
         public int Health;
         public float AtkUp;
-        public bool IsEquipped;
+        public byte EquipmentState;
         public CharacterEquipment Equipment;
         public CharacterLocation Location;
         public Vec3f Bomb;
@@ -49,7 +49,7 @@ namespace BOTWM.Server.DTO
         public int Animation;
         public int Health;
         public float AtkUp;
-        public bool IsEquipped;
+        public byte EquipmentState;
         public CharacterEquipment Equipment;
         public CharacterLocation Location;
         public Vec3f Bomb;

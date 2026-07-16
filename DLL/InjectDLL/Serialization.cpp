@@ -7,6 +7,14 @@ using namespace Serialization;
 
 namespace
 {
+	std::string ByteHex(byte value)
+	{
+		std::stringstream stream;
+		stream << "0x" << std::hex << std::setw(2) << std::setfill('0')
+			<< static_cast<int>(value);
+		return stream.str();
+	}
+
 	bool SameEquipment(const CharacterEquipment& left, const CharacterEquipment& right)
 	{
 		return left.WType == right.WType && left.Sword == right.Sword &&
@@ -16,13 +24,14 @@ namespace
 	}
 
 	std::string EquipmentWireValues(
-		const CharacterEquipment& equipment, bool isEquipped)
+		const CharacterEquipment& equipment, byte equipmentState)
 	{
 		return "WType=" + std::to_string(equipment.WType) +
 			", sword=" + std::to_string(equipment.Sword) +
 			", shield=" + std::to_string(equipment.Shield) +
 			", bow=" + std::to_string(equipment.Bow) +
-			", IsEquipped=" + std::to_string(isEquipped ? 1 : 0);
+			", EquipmentState=" + ByteHex(equipmentState) +
+			", normalized=" + (equipmentState != 0 ? "held" : "sheathed");
 	}
 }
 
@@ -263,12 +272,9 @@ DTO::CloseCharacterDTO* Serializer::DeserializeCloseCharacter(std::vector<byte> 
 	copyData(&result->Animation, &input[0] + currentIndex, 4);
 	copyData(&result->Health, &input[0] + currentIndex, 4);
 	copyData(&result->AtkUp, &input[0] + currentIndex, 4);
-	byte equippedWireByte = 0;
-	copyData(&equippedWireByte, &input[0] + currentIndex, 1);
-	// Older native senders copied an invalid C++ bool representation directly
-	// from game memory. Treat every nonzero byte as true while keeping the DTO
-	// itself canonical on all platforms.
-	result->IsEquipped = equippedWireByte != 0;
+	copyData(&result->EquipmentState, &input[0] + currentIndex, 1);
+	// This remains a one-byte field, so older clients continue to interpret any
+	// nonzero raw value as true and older servers can still relay canonical 0/1.
 	//copyData(&result->Equipment, &input[0] + currentIndex, 13);
 	copyData(&result->Equipment.WType, &input[0] + currentIndex, 1);
 	copyData(&result->Equipment.Sword, &input[0] + currentIndex, 2);
@@ -279,20 +285,20 @@ DTO::CloseCharacterDTO* Serializer::DeserializeCloseCharacter(std::vector<byte> 
 	copyData(&result->Equipment.Lower, &input[0] + currentIndex, 2);
 
 	static std::map<byte, CharacterEquipment> lastEquipmentByPlayer;
-	static std::map<byte, bool> lastEquippedStateByPlayer;
+	static std::map<byte, byte> lastEquipmentStateByPlayer;
 	const auto lastEquipment = lastEquipmentByPlayer.find(result->PlayerNumber);
-	const auto lastState = lastEquippedStateByPlayer.find(result->PlayerNumber);
+	const auto lastState = lastEquipmentStateByPlayer.find(result->PlayerNumber);
 	if (lastEquipment == lastEquipmentByPlayer.end() ||
-		lastState == lastEquippedStateByPlayer.end() ||
+		lastState == lastEquipmentStateByPlayer.end() ||
 		!SameEquipment(lastEquipment->second, result->Equipment) ||
-		lastState->second != result->IsEquipped)
+		lastState->second != result->EquipmentState)
 	{
 		lastEquipmentByPlayer[result->PlayerNumber] = result->Equipment;
-		lastEquippedStateByPlayer[result->PlayerNumber] = result->IsEquipped;
+		lastEquipmentStateByPlayer[result->PlayerNumber] = result->EquipmentState;
 		Logging::LoggerService::LogInformation(
 			"Equipment wire receiver player " + std::to_string(result->PlayerNumber) +
-			": " + EquipmentWireValues(result->Equipment, result->IsEquipped) +
-			", wireByte=" + std::to_string(equippedWireByte) + ".",
+			": " + EquipmentWireValues(result->Equipment, result->EquipmentState) +
+			", wireByte=" + ByteHex(result->EquipmentState) + ".",
 			__FUNCTION__);
 	}
 
@@ -553,16 +559,16 @@ void Serializer::SerializeCharacterData(DTO::ClientCharacterDTO* input)
 {
 	static bool senderLogInitialized = false;
 	static CharacterEquipment lastSentEquipment{};
-	static bool lastSentEquippedState = false;
+	static byte lastSentEquipmentState = 0;
 	if (!senderLogInitialized || !SameEquipment(lastSentEquipment, input->Equipment) ||
-		lastSentEquippedState != input->IsEquipped)
+		lastSentEquipmentState != input->EquipmentState)
 	{
 		senderLogInitialized = true;
 		lastSentEquipment = input->Equipment;
-		lastSentEquippedState = input->IsEquipped;
+		lastSentEquipmentState = input->EquipmentState;
 		Logging::LoggerService::LogInformation(
 			"Equipment wire sender: " +
-			EquipmentWireValues(input->Equipment, input->IsEquipped) + ".",
+			EquipmentWireValues(input->Equipment, input->EquipmentState) + ".",
 			__FUNCTION__);
 	}
 
@@ -574,9 +580,7 @@ void Serializer::SerializeCharacterData(DTO::ClientCharacterDTO* input)
 	copyData(&ClientData[0] + currentIndex, &input->Animation, 4);
 	copyData(&ClientData[0] + currentIndex, &input->Health, 4);
 	copyData(&ClientData[0] + currentIndex, &input->AtkUp, 4);
-	// Never expose the in-memory representation of C++ bool on the wire.
-	const byte equippedWireByte = input->IsEquipped ? 1 : 0;
-	copyData(&ClientData[0] + currentIndex, &equippedWireByte, 1);
+	copyData(&ClientData[0] + currentIndex, &input->EquipmentState, 1);
 	//copyData(&ClientData[0] + currentIndex, &input->Equipment, 13);
 	copyData(&ClientData[0] + currentIndex, &input->Equipment.WType, 1);
 	copyData(&ClientData[0] + currentIndex, &input->Equipment.Sword, 2);
