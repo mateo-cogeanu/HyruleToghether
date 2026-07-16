@@ -80,7 +80,7 @@ namespace MemoryAccess
 		BigEndian<int>* Health;
 		BigEndian<int>* Defense;
 		BigEndian<float>* AtkUp;
-		BigEndian<int>* EquipmentState;
+		LittleEndian<byte>* EquipmentControllerState;
 		LocationAccess* Location;
 		EquippedItems* Equipment;
 		BigEndian<int>* Animation;
@@ -245,13 +245,13 @@ namespace MemoryAccess
 			//Health = new BigEndian<int>({ 0x6E, -1, -1, 0x38, 0x00, 0x00, 0x00, -1, 0x6E, -1, -1, -1, 0x6E, -1, -1, 0x58, -1, -1, -1, -1, 0x00, 0x00, 0x00, -1, 0x6E, -1, -1, -1, 0x6E, 0xD1 }, 0x04, __FUNCTION__);
 			AtkUp = new BigEndian<float>({ 0xBF, 0x80, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, -1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, -1, 0x80, 0x00, 0x00 }, 0x10C, "Memory::LocalInstance::scan::AtkUp");
 			Logging::LoggerService::LogDebug("Scan stage complete: attack up", __FUNCTION__);
-			// ChangeWeaponEquipState writes the authoritative Hold/Equip/Invisible
-			// value directly into GameROMPlayer + 0xb94 (0/1/2). Reading the old
-			// controller-chain byte produced non-canonical bool values such as 0x87
-			// and missed most sheath/unsheath transitions.
-			EquipmentState = new BigEndian<int>(
-				Memory::getBaseAddress() + this->baseAddr + 0xB94,
-				"Memory::LocalInstance::scan::EquipmentState");
+			// Link's controller exposes the live held/sheathed flag through this
+			// chain. It is a raw byte (observed values include 0x00 and 0x87), not a
+			// C++ bool. Reading it as bool made both negation and serialization
+			// undefined and lost most state transitions.
+			EquipmentControllerState = new LittleEndian<byte>(
+				this->baseAddr, { 0x394, 0xAC, 0xA4 }, 0x0,
+				"Memory::LocalInstance::scan::EquipmentControllerState");
 			//Defense = new BigEndian<int>({ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, -1, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, -1, 0x3F, 0x80, 0x00, 0x00 }, 0x20, __FUNCTION__);
 			Defense = new BigEndian<int>(this->baseAddr, { 0x3b4, 0x0, 0x20, 0x4, 0x28, 0xd4, 0x158, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0xb0, 0x4, 0x4, 0xac, 0x28, 0x4 }, -0xE54, "Memory::LocalInstance::scan::Defense");
 			Health = new BigEndian<int>(Memory::getBaseAddress() + this->baseAddr + 0x540, "Memory::LocalInstance::scan::Health");
@@ -591,18 +591,22 @@ namespace MemoryAccess
 			result->Animation = this->Animation->get(__FUNCTION__);
 			result->Health = this->Health->get(__FUNCTION__);
 			result->AtkUp = this->AtkUp->get(__FUNCTION__);
-			// BOTW stores 0 for Hold, 1 for Equip (sheathed), and 2 for Invisible.
-			// The multiplayer protocol represents only Hold versus not-Hold.
-			const int equipmentState = this->EquipmentState->get(__FUNCTION__);
-			result->IsEquipped = equipmentState == 0;
-			static int lastLoggedEquipmentState = -1;
-			if (equipmentState != lastLoggedEquipmentState)
+			// The legacy sender and live logs agree that zero means actively held;
+			// any nonzero controller flags mean the equipment is sheathed.
+			const byte equipmentControllerState =
+				this->EquipmentControllerState->get(__FUNCTION__);
+			result->IsEquipped = equipmentControllerState == 0;
+			static int lastLoggedEquipmentControllerState = -1;
+			if (equipmentControllerState != lastLoggedEquipmentControllerState)
 			{
-				lastLoggedEquipmentState = equipmentState;
+				lastLoggedEquipmentControllerState = equipmentControllerState;
+				std::stringstream stream;
+				stream << "Local equipment controller state: address=0x" << std::hex
+					<< this->EquipmentControllerState->address << ", raw=0x"
+					<< static_cast<int>(equipmentControllerState) << std::dec
+					<< ", IsEquipped=" << (result->IsEquipped ? 1 : 0) << ".";
 				Logging::LoggerService::LogInformation(
-					"Local actor equipment state: raw=" + std::to_string(equipmentState) +
-					", IsEquipped=" + std::to_string(result->IsEquipped ? 1 : 0) + ".",
-					__FUNCTION__);
+					stream.str(), __FUNCTION__);
 			}
 			result->Equipment = this->Equipment->getEquipment(__FUNCTION__);
 			result->Location = this->Location->get(__FUNCTION__);
