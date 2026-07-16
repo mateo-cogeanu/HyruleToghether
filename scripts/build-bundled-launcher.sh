@@ -49,7 +49,10 @@ for generated in "$staging" "$build_root/dist" "$build_root/work"; do
   if [[ -e "$generated" ]]; then
     stale="$generated.previous-build.$$"
     mv "$generated" "$stale"
-    rm -rf "$stale"
+    # Finder may recreate .DS_Store while an old app bundle is being removed.
+    # The old output has already been moved out of the packager's way, so a
+    # metadata race must not abort an otherwise reproducible bundle build.
+    rm -rf "$stale" 2>/dev/null || true
   fi
 done
 mkdir -p "$staging/runtime/cemu" "$staging/runtime/client" "$staging/runtime/server" "$staging/runtime/mod" "$staging/runtime/tools"

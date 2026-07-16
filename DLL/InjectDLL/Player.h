@@ -173,6 +173,30 @@ namespace MemoryAccess
 				LastIsEquipped.exchange(PlayerData->IsEquipped, std::memory_order_acq_rel) !=
 				PlayerData->IsEquipped;
 
+			// Demo_ChangeEquipState is the first action in Jugador*_Update and the
+			// generated NPC flow may run only once on native Cemu. Prime its live
+			// parameter before the actor exists, just like the normal animation
+			// control above. Leaving Jugador*_Hold here during creation makes BOTW
+			// create the equipment children without ever attaching/showing them.
+			bool equipmentControlReady = HoldAddr != 0;
+#ifndef _WIN32
+			equipmentControlReady = ResolveNativeAnimationControls() && HoldAddr != 0;
+#endif
+			if (!isPaused && equipmentControlReady)
+			{
+				const std::string equipmentState = PlayerData->IsEquipped ? "Hold" : "Equip";
+				Memory::write_string(HoldAddr, equipmentState, 6, __FUNCTION__);
+				if (equippedStateChanged || this->baseAddr == 0)
+				{
+					std::stringstream stream;
+					stream << "Player " << PlayerNumber << " primed equipment state at 0x"
+						<< std::hex << HoldAddr << " before actor update: requested="
+						<< equipmentState << ", readback="
+						<< Memory::read_string(HoldAddr, 6, __FUNCTION__) << ".";
+					Logging::LoggerService::LogInformation(stream.str(), __FUNCTION__);
+				}
+			}
+
 			if (this->baseAddr == 0)
 				return;
 
@@ -259,19 +283,6 @@ namespace MemoryAccess
 			
 			LastAnimation = PlayerData->Animation;
 
-			if (HoldAddr != 0)
-			{
-				const std::string equipmentState = PlayerData->IsEquipped ? "Hold" : "Equip";
-				Memory::write_string(HoldAddr, equipmentState, 6, __FUNCTION__);
-				if (equippedStateChanged)
-				{
-					std::stringstream stream;
-					stream << "Player " << PlayerNumber << " equipment hold control at 0x"
-						<< std::hex << HoldAddr << ": requested=" << equipmentState
-						<< ", readback=" << Memory::read_string(HoldAddr, 6, __FUNCTION__) << ".";
-					Logging::LoggerService::LogInformation(stream.str(), __FUNCTION__);
-				}
-			}
 			if (equipmentChanged && this->baseAddr != 0)
 			{
 				this->EquipmentRefreshPending.store(true, std::memory_order_release);
