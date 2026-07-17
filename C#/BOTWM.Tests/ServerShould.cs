@@ -45,9 +45,9 @@ namespace BOTWM.Tests
         }
 
         [Fact]
-        public void PreserveRawEquipmentStateAcrossServerPlayerMapping()
+        public void PreserveTypedBowEquipmentModeAcrossServerPlayerMapping()
         {
-            const byte rawEquipmentState = 0x57;
+            const byte rawEquipmentState = 3;
             ClientPlayerDTO update = new ClientPlayerDTO
             {
                 EquipmentState = rawEquipmentState
@@ -63,9 +63,9 @@ namespace BOTWM.Tests
         }
 
         [Fact]
-        public void PreserveRawEquipmentStateAcrossBinaryServerProtocol()
+        public void PreserveTypedBowEquipmentModeAcrossBinaryServerProtocol()
         {
-            const byte rawEquipmentState = 0x57;
+            const byte rawEquipmentState = 3;
             ClientDTO update = new ClientDTO
             {
                 WorldData = new WorldDTO(),
@@ -82,7 +82,15 @@ namespace BOTWM.Tests
                     Bomb = new Vec3f(),
                     Bomb2 = new Vec3f(),
                     BombCube = new Vec3f(),
-                    BombCube2 = new Vec3f()
+                    BombCube2 = new Vec3f(),
+                    Arrow = new ProjectileData
+                    {
+                        Id = 42,
+                        Type = 2,
+                        Active = true,
+                        Position = new Vec3f { x = 1, y = 2, z = 3 },
+                        Rotation = new Quaternion { q1 = 0, q2 = 0, q3 = 0, q4 = 1 }
+                    }
                 },
                 EnemyData = new EnemyDTO { Health = new List<EnemyData>() },
                 QuestData = new QuestsDTO { Completed = new List<string>() }
@@ -98,6 +106,10 @@ namespace BOTWM.Tests
 
             Assert.Equal(MessageType.update, decoded.Item1);
             Assert.Equal(rawEquipmentState, decodedUpdate.PlayerData.EquipmentState);
+            Assert.Equal(42, decodedUpdate.PlayerData.Arrow.Id);
+            Assert.Equal((byte)2, decodedUpdate.PlayerData.Arrow.Type);
+            Assert.True(decodedUpdate.PlayerData.Arrow.Active);
+            Assert.Equal(3, decodedUpdate.PlayerData.Arrow.Position.z);
         }
     }
 }

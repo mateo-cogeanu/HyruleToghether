@@ -142,7 +142,7 @@ ClientDTO client = new ClientDTO()
         Animation = 3,
         Health = 30,
         AtkUp = 5,
-        IsEquipped = true,
+        EquipmentState = 2,
         Equipment = new CharacterEquipment()
         {
             WType = 1,
@@ -157,7 +157,8 @@ ClientDTO client = new ClientDTO()
         Bomb = new Vec3f(1000, 200, 30),
         Bomb2 = new Vec3f(50, 3, 2),
         BombCube = new Vec3f(1, 2, 3),
-        BombCube2 = new Vec3f(2, 3, 1)
+        BombCube2 = new Vec3f(2, 3, 1),
+        Arrow = new ProjectileData()
     },
     EnemyData = new EnemyDTO() { Health = enemyData },
     QuestData = new QuestsDTO() { Completed = questList }
@@ -205,7 +206,7 @@ while (true)
             client.PlayerData.Animation = serverData.ClosePlayers[0].Animation;
             client.PlayerData.Health = serverData.ClosePlayers[0].Health;
             client.PlayerData.AtkUp = serverData.ClosePlayers[0].AtkUp;
-            client.PlayerData.IsEquipped = serverData.ClosePlayers[0].IsEquipped;
+            client.PlayerData.EquipmentState = serverData.ClosePlayers[0].EquipmentState;
             client.PlayerData.Equipment.WType = serverData.ClosePlayers[0].Equipment.WType;
             client.PlayerData.Equipment.Sword = serverData.ClosePlayers[0].Equipment.Sword;
             client.PlayerData.Equipment.Shield = serverData.ClosePlayers[0].Equipment.Shield;

@@ -6,6 +6,7 @@
 #include "Quaternion.h"
 #include "CharacterLocation.h"
 #include "CharacterEquipment.h"
+#include "ProjectileDTO.h"
 
 using namespace DataTypes;
 
@@ -23,9 +24,9 @@ namespace DTO
 		int Animation;
 		int Health;
 		float AtkUp;
-		// Full raw byte from Link's verified equipment-controller field. Zero is
-		// sheathed and nonzero is held; retaining the remaining bits lets matching
-		// builds diagnose shield/bow submodes without changing the wire size.
+		// Compact mode derived from Link's verified controller profile string.
+		// Zero remains sheathed and every active mode remains nonzero for legacy
+		// one-byte boolean compatibility.
 		byte EquipmentState;
 		CharacterEquipment Equipment;
 		CharacterLocation Location;
@@ -33,6 +34,7 @@ namespace DTO
 		Vec3f Bomb2;
 		Vec3f BombCube;
 		Vec3f BombCube2;
+		ProjectileDTO Arrow;
 	};
 
 	class CloseCharacterDTO
@@ -56,6 +58,7 @@ namespace DTO
 		Vec3f Bomb2;
 		Vec3f BombCube;
 		Vec3f BombCube2;
+		ProjectileDTO Arrow;
 	};
 
 	class FarCharacterDTO

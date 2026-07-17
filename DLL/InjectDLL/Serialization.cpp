@@ -1,5 +1,6 @@
 #include "Serialization.h"
 #include "LoggerService.h"
+#include "EquipmentMode.h"
 #include <sstream>
 #include <map>
 
@@ -31,7 +32,7 @@ namespace
 			", shield=" + std::to_string(equipment.Shield) +
 			", bow=" + std::to_string(equipment.Bow) +
 			", EquipmentState=" + ByteHex(equipmentState) +
-			", normalized=" + (equipmentState != 0 ? "held" : "sheathed");
+			", normalized=" + EquipmentModeName(equipmentState);
 	}
 }
 
@@ -343,6 +344,23 @@ DTO::CloseCharacterDTO* Serializer::DeserializeCloseCharacter(std::vector<byte> 
 	}
 
 	copyData(&result->Bomb, &input[0] + currentIndex, 48);
+	copyData(&result->Arrow.Id, &input[0] + currentIndex, 4);
+	copyData(&result->Arrow.Type, &input[0] + currentIndex, 1);
+	copyData(&result->Arrow.Active, &input[0] + currentIndex, 1);
+	copyData(&result->Arrow.Position, &input[0] + currentIndex, 12);
+	copyData(&result->Arrow.Rotation, &input[0] + currentIndex, 16);
+	static std::map<byte, std::pair<int, bool>> lastArrowByPlayer;
+	const std::pair<int, bool> arrowState{result->Arrow.Id, result->Arrow.Active};
+	if (lastArrowByPlayer[result->PlayerNumber] != arrowState)
+	{
+		lastArrowByPlayer[result->PlayerNumber] = arrowState;
+		Logging::LoggerService::LogInformation(
+			"Arrow wire receiver player=" + std::to_string(result->PlayerNumber) +
+			", id=" + std::to_string(result->Arrow.Id) +
+			", type=" + std::to_string(result->Arrow.Type) +
+			", active=" + (result->Arrow.Active ? "true" : "false") + ".",
+			__FUNCTION__);
+	}
 
 	return result;
 }
@@ -560,6 +578,8 @@ void Serializer::SerializeCharacterData(DTO::ClientCharacterDTO* input)
 	static bool senderLogInitialized = false;
 	static CharacterEquipment lastSentEquipment{};
 	static byte lastSentEquipmentState = 0;
+	static int lastSentArrowId = 0;
+	static bool lastSentArrowActive = false;
 	if (!senderLogInitialized || !SameEquipment(lastSentEquipment, input->Equipment) ||
 		lastSentEquipmentState != input->EquipmentState)
 	{
@@ -569,6 +589,16 @@ void Serializer::SerializeCharacterData(DTO::ClientCharacterDTO* input)
 		Logging::LoggerService::LogInformation(
 			"Equipment wire sender: " +
 			EquipmentWireValues(input->Equipment, input->EquipmentState) + ".",
+			__FUNCTION__);
+	}
+	if (lastSentArrowId != input->Arrow.Id || lastSentArrowActive != input->Arrow.Active)
+	{
+		lastSentArrowId = input->Arrow.Id;
+		lastSentArrowActive = input->Arrow.Active;
+		Logging::LoggerService::LogInformation(
+			"Arrow wire sender: id=" + std::to_string(input->Arrow.Id) +
+			", type=" + std::to_string(input->Arrow.Type) +
+			", active=" + (input->Arrow.Active ? "true" : "false") + ".",
 			__FUNCTION__);
 	}
 
@@ -626,6 +656,11 @@ void Serializer::SerializeCharacterData(DTO::ClientCharacterDTO* input)
 	copyData(&ClientData[0] + currentIndex, &SectByte, 1);
 
 	copyData(&ClientData[0] + currentIndex, &input->Bomb, 48);
+	copyData(&ClientData[0] + currentIndex, &input->Arrow.Id, 4);
+	copyData(&ClientData[0] + currentIndex, &input->Arrow.Type, 1);
+	copyData(&ClientData[0] + currentIndex, &input->Arrow.Active, 1);
+	copyData(&ClientData[0] + currentIndex, &input->Arrow.Position, 12);
+	copyData(&ClientData[0] + currentIndex, &input->Arrow.Rotation, 16);
 }
 
 void Serializer::SerializeEnemyData(DTO::EnemyDTO* input)

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Actor.h"
+#include "EquipmentMode.h"
+#include "ProjectileAccess.h"
 
 using namespace DataTypes;
 
@@ -80,7 +82,8 @@ namespace MemoryAccess
 		BigEndian<int>* Health;
 		BigEndian<int>* Defense;
 		BigEndian<float>* AtkUp;
-		LittleEndian<byte>* EquipmentControllerState;
+		LittleEndian<byte>* EquipmentControllerType;
+		std::atomic<byte> CurrentEquipmentMode{ EquipmentSheathed };
 		LocationAccess* Location;
 		EquippedItems* Equipment;
 		BigEndian<int>* Animation;
@@ -88,6 +91,7 @@ namespace MemoryAccess
 		BombAccess* Bomb2 = new BombAccess();
 		BombAccess* BombCube = new BombAccess();
 		BombAccess* BombCube2 = new BombAccess();
+		ProjectileAccess* Arrow = new ProjectileAccess();
 		EnemyAccess* EnemyService = new EnemyAccess();
 		QuestAccess* QuestService = new QuestAccess();
 
@@ -245,13 +249,12 @@ namespace MemoryAccess
 			//Health = new BigEndian<int>({ 0x6E, -1, -1, 0x38, 0x00, 0x00, 0x00, -1, 0x6E, -1, -1, -1, 0x6E, -1, -1, 0x58, -1, -1, -1, -1, 0x00, 0x00, 0x00, -1, 0x6E, -1, -1, -1, 0x6E, 0xD1 }, 0x04, __FUNCTION__);
 			AtkUp = new BigEndian<float>({ 0xBF, 0x80, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, -1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, -1, 0x80, 0x00, 0x00 }, 0x10C, "Memory::LocalInstance::scan::AtkUp");
 			Logging::LoggerService::LogDebug("Scan stage complete: attack up", __FUNCTION__);
-			// Link's controller exposes the live held/sheathed flag through this
-			// chain. It is a raw byte (observed values include 0x00 and 0x87), not a
-			// C++ bool. Reading it as bool made both negation and serialization
-			// undefined and lost most state transitions.
-			EquipmentControllerState = new LittleEndian<byte>(
+			// Runtime captures prove that this chain resolves Link's current
+			// equipment profile string: empty while sheathed, WeaponSmallSword for
+			// one-handed melee, and WeaponBow while aiming/firing.
+			EquipmentControllerType = new LittleEndian<byte>(
 				this->baseAddr, { 0x394, 0xAC, 0xA4 }, 0x0,
-				"Memory::LocalInstance::scan::EquipmentControllerState");
+				"Memory::LocalInstance::scan::EquipmentControllerType");
 			//Defense = new BigEndian<int>({ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, -1, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, -1, 0x3F, 0x80, 0x00, 0x00 }, 0x20, __FUNCTION__);
 			Defense = new BigEndian<int>(this->baseAddr, { 0x3b4, 0x0, 0x20, 0x4, 0x28, 0xd4, 0x158, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0xb0, 0x4, 0x4, 0xac, 0x28, 0x4 }, -0xE54, "Memory::LocalInstance::scan::Defense");
 			Health = new BigEndian<int>(Memory::getBaseAddress() + this->baseAddr + 0x540, "Memory::LocalInstance::scan::Health");
@@ -591,22 +594,21 @@ namespace MemoryAccess
 			result->Animation = this->Animation->get(__FUNCTION__);
 			result->Health = this->Health->get(__FUNCTION__);
 			result->AtkUp = this->AtkUp->get(__FUNCTION__);
-			// Cross-platform visual verification proves that Link's controller byte
-			// is nonzero while equipment is held and zero while it is sheathed. Keep
-			// the complete byte so later captures can distinguish independent modes.
-			const byte equipmentControllerState =
-				this->EquipmentControllerState->get(__FUNCTION__);
+			const std::string equipmentControllerType = Memory::read_string(
+				this->EquipmentControllerType->address, 32, __FUNCTION__);
+			const byte equipmentControllerState = ParseEquipmentMode(equipmentControllerType);
+			CurrentEquipmentMode.store(equipmentControllerState, std::memory_order_release);
 			result->EquipmentState = equipmentControllerState;
 			static int lastLoggedEquipmentControllerState = -1;
 			if (equipmentControllerState != lastLoggedEquipmentControllerState)
 			{
 				lastLoggedEquipmentControllerState = equipmentControllerState;
 				std::stringstream stream;
-				stream << "Local equipment controller state: address=0x" << std::hex
-					<< this->EquipmentControllerState->address << ", raw=0x"
-					<< static_cast<int>(equipmentControllerState) << std::dec
-					<< ", normalized="
-					<< (equipmentControllerState != 0 ? "held" : "sheathed") << ".";
+				stream << "Local equipment controller type: address=0x" << std::hex
+					<< this->EquipmentControllerType->address << std::dec << ", rawString="
+					<< (equipmentControllerType.empty() ? "<empty>" : equipmentControllerType)
+					<< ", wireMode=" << static_cast<int>(equipmentControllerState)
+					<< ", normalized=" << EquipmentModeName(equipmentControllerState) << ".";
 				Logging::LoggerService::LogInformation(
 					stream.str(), __FUNCTION__);
 			}
@@ -616,7 +618,7 @@ namespace MemoryAccess
 			// evidence required before assigning shield/bow meanings to nearby fields.
 			constexpr int controllerContextRadius = 8;
 			const uint64_t contextAddress =
-				this->EquipmentControllerState->address - controllerContextRadius;
+				this->EquipmentControllerType->address - controllerContextRadius;
 			const std::vector<byte> controllerContext = Memory::read_bytes(
 				contextAddress, controllerContextRadius * 2 + 1, __FUNCTION__);
 			static uint64_t lastControllerContextAddress = 0;
@@ -658,6 +660,7 @@ namespace MemoryAccess
 			result->Bomb2 = this->Bomb2->get(__FUNCTION__);
 			result->BombCube = this->BombCube->get(__FUNCTION__);
 			result->BombCube2 = this->BombCube2->get(__FUNCTION__);
+			result->Arrow = this->Arrow->Get(__FUNCTION__);
 
 			return result;
 		}

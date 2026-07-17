@@ -28,6 +28,7 @@ namespace BOTWM.Server.DTO
         public Vec3f Bomb2;
         public Vec3f BombCube;
         public Vec3f BombCube2;
+        public ProjectileData Arrow = new ProjectileData();
     }
 
     public class FarPlayerDTO
@@ -56,5 +57,6 @@ namespace BOTWM.Server.DTO
         public Vec3f Bomb2;
         public Vec3f BombCube;
         public Vec3f BombCube2;
+        public ProjectileData Arrow = new ProjectileData();
     }
 }

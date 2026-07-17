@@ -4,6 +4,7 @@
 #include <atomic>
 #include <mutex>
 #include <limits>
+#include <cmath>
 #include "KeyCodeActor.h"
 #include "BotwEdit.h"
 #include <map>
@@ -123,7 +124,8 @@ static_assert(sizeof(InstanceData) == 256, "Spawn instance ring entry must remai
 	extern struct QueueEquipmentState {
 		int playerNumber;
 		uint32_t actorAddress;
-		bool held;
+		byte mode;
+		byte weaponType;
 		DWORD queuedAt;
 	};
 
@@ -159,7 +161,7 @@ uint32_t pending_animation_actor = 0;
 uint32_t pending_animation_hash = 0;
 int pending_equipment_player = 0;
 uint32_t pending_equipment_actor = 0;
-bool pending_equipment_held = false;
+byte pending_equipment_mode = EquipmentSheathed;
 int pending_delete_player = 0;
 uint32_t pending_delete_actor = 0;
 bool actor_spawn_template_ready = false;
@@ -185,6 +187,18 @@ struct PendingEquipmentChild
 
 std::mutex equipment_child_mutex;
 std::vector<PendingEquipmentChild> pendingEquipmentChildren;
+
+struct PendingArrowClaim
+{
+	int playerNumber;
+	int generation;
+	std::string actorName;
+	DWORD queuedAt;
+};
+
+std::mutex arrow_claim_mutex;
+std::vector<PendingArrowClaim> pendingArrowClaims;
+std::mutex remoteArrowRequestMutex;
 
 std::map<char, bool> prevKeyStateMap; // Used for key press logic - keeps track of previous key state
 
@@ -321,6 +335,122 @@ void LogEquipmentChildCreation(const std::string& name, uint32_t actorAddress)
 	pendingEquipmentChildren.erase(pending);
 }
 
+bool TryGetArrowType(const std::string& name, byte& type)
+{
+	if (name == "NormalArrow") type = 0;
+	else if (name == "FireArrow") type = 1;
+	else if (name == "IceArrow") type = 2;
+	else if (name == "ElectricArrow") type = 3;
+	else if (name == "BombArrow_A") type = 4;
+	else if (name == "AncientArrow") type = 5;
+	else return false;
+	return true;
+}
+
+void queueRemoteArrowClaim(
+	int playerNumber, int generation, const std::string& actorName)
+{
+	std::lock_guard<std::mutex> lock(arrow_claim_mutex);
+	pendingArrowClaims.push_back(
+		{playerNumber, generation, actorName, GetTickCount()});
+}
+
+void ObserveArrowCreation(const std::string& name, uint32_t actorAddress)
+{
+	byte type = 0;
+	if (!TryGetArrowType(name, type))
+		return;
+
+	// Synthetic arrows carry an ordered claim registered by the exact remote
+	// player and wire generation that requested the actor. Consume that claim
+	// before local observation, so identical simultaneous arrow types cannot be
+	// assigned by player-map iteration order or echoed back to the server.
+	PendingArrowClaim claim{};
+	bool hasClaim = false;
+	{
+		std::lock_guard<std::mutex> lock(arrow_claim_mutex);
+		const DWORD now = GetTickCount();
+		pendingArrowClaims.erase(
+			std::remove_if(
+				pendingArrowClaims.begin(), pendingArrowClaims.end(),
+				[now](const PendingArrowClaim& candidate) {
+					return static_cast<DWORD>(now - candidate.queuedAt) > 10000;
+				}),
+			pendingArrowClaims.end());
+		const auto pending = std::find_if(
+			pendingArrowClaims.begin(), pendingArrowClaims.end(),
+			[&name](const PendingArrowClaim& candidate) {
+				return candidate.actorName == name;
+			});
+		if (pending != pendingArrowClaims.end())
+		{
+			claim = *pending;
+			pendingArrowClaims.erase(pending);
+			hasClaim = true;
+		}
+	}
+
+	if (hasClaim)
+	{
+		bool stale = false;
+		const auto player = Instances::PlayerList.find(claim.playerNumber);
+		if (player == Instances::PlayerList.end())
+			stale = true;
+		else
+			player->second->Arrow->TryAssignRemote(
+				name, claim.generation, actorAddress, __FUNCTION__, stale);
+		std::stringstream stream;
+		stream << (stale ? "Ignored stale" : "Assigned") << " remote arrow player="
+			<< claim.playerNumber << ", id=" << claim.generation
+			<< ", actor=" << name << ", guest=0x" << std::hex << actorAddress << ".";
+		Logging::LoggerService::LogInformation(stream.str(), __FUNCTION__);
+		if (stale)
+		{
+			MemoryAccess::Actor staleArrow;
+			staleArrow.setAddress(actorAddress);
+			staleArrow.Teleport(Vec3f(0.0f, -10000.0f, 0.0f));
+		}
+		return;
+	}
+
+	if (Game::GameInstance->CurrentEquipmentMode.load(std::memory_order_acquire) !=
+		EquipmentBow)
+		return;
+	if (!Game::GameInstance->Arrow->BeginLocal(actorAddress, type, name, __FUNCTION__))
+		return;
+
+	ProjectileDTO projectile = Game::GameInstance->Arrow->Get(__FUNCTION__);
+	Vec3f linkPosition = Game::GameInstance->Position->get(__FUNCTION__);
+	const float dx = projectile.Position.x() - linkPosition.x();
+	const float dy = projectile.Position.y() - linkPosition.y();
+	const float dz = projectile.Position.z() - linkPosition.z();
+	const float distanceSquared = dx * dx + dy * dy + dz * dz;
+	if (distanceSquared > 144.0f)
+	{
+		Game::GameInstance->Arrow->EndLocal(actorAddress);
+		Logging::LoggerService::LogDebug(
+			"Rejected non-local arrow candidate outside Link ownership radius: " + name,
+			__FUNCTION__);
+		return;
+	}
+
+	std::stringstream stream;
+	stream << "Captured local arrow id=" << projectile.Id << ", actor=" << name
+		<< ", guest=0x" << std::hex << actorAddress << std::dec
+		<< ", distance=" << std::sqrt(distanceSquared) << ".";
+	Logging::LoggerService::LogInformation(stream.str(), __FUNCTION__);
+}
+
+void ObserveArrowErase(const std::string& name, uint32_t actorAddress)
+{
+	byte type = 0;
+	if (!TryGetArrowType(name, type))
+		return;
+	Game::GameInstance->Arrow->EndLocal(actorAddress);
+	for (const auto& player : Instances::PlayerList)
+		player.second->Arrow->EndRemote(actorAddress);
+}
+
 void DespawnStalePlayerActors()
 {
 	if (Instances::PlayerList.empty())
@@ -343,6 +473,10 @@ void DespawnStalePlayerActors()
 		queuedActorDeletes.clear();
 		queuedEquipmentStates.clear();
 		completedAnimations.clear();
+	}
+	{
+		std::lock_guard<std::mutex> claimLock(arrow_claim_mutex);
+		pendingArrowClaims.clear();
 	}
 	Logging::LoggerService::LogInformation(
 		"Despawning stale remote player actors before multiplayer synchronization; discarded " +
@@ -472,7 +606,8 @@ void queueRemoteAnimation(int playerNumber, uint64_t actorAddress, uint32_t anim
 	queuedAnimations.push_back({playerNumber, guestActorAddress, animation});
 }
 
-void queueRemoteEquipmentState(int playerNumber, uint64_t actorAddress, bool held)
+void queueRemoteEquipmentState(
+	int playerNumber, uint64_t actorAddress, byte mode, byte weaponType)
 {
 	if (playerNumber < 1 || playerNumber > 32 || actorAddress == 0 ||
 		actorAddress > std::numeric_limits<uint32_t>::max())
@@ -485,12 +620,14 @@ void queueRemoteEquipmentState(int playerNumber, uint64_t actorAddress, bool hel
 		if (queued.playerNumber == playerNumber)
 		{
 			queued.actorAddress = guestActorAddress;
-			queued.held = held;
+			queued.mode = mode;
+			queued.weaponType = weaponType;
 			queued.queuedAt = GetTickCount();
 			return;
 		}
 	}
-	queuedEquipmentStates.push_back({playerNumber, guestActorAddress, held, GetTickCount()});
+	queuedEquipmentStates.push_back(
+		{playerNumber, guestActorAddress, mode, weaponType, GetTickCount()});
 }
 
 void queueRemoteActorRefresh(int playerNumber, uint64_t actorAddress)
@@ -872,9 +1009,67 @@ bool setupEquipmentState(PPCInterpreter_t* hCPU, TransferableData& trnsData,
 		return false;
 	}
 
+	const bool held = IsEquipmentHeld(queued.mode);
+	std::string controllerProfile;
+	if (queued.mode == EquipmentBow)
+		controllerProfile = "WeaponBow";
+	else if (queued.mode == EquipmentShield)
+		controllerProfile = "WeaponShield";
+	else if (queued.mode == EquipmentMelee)
+	{
+		switch (queued.weaponType)
+		{
+		case 2: controllerProfile = "WeaponLargeSword"; break;
+		case 3: controllerProfile = "WeaponSpear"; break;
+		default: controllerProfile = "WeaponSmallSword"; break;
+		}
+	}
+
+	// The local capture and the Jugador actor share the same controller chain.
+	// Populate its verified profile string before the existing 0x2c notification
+	// so BOTW can choose the bow, shield, or melee child instead of receiving only
+	// an indistinguishable Hold boolean. Sheathed and legacy packets deliberately
+	// leave this field alone; the proven Equip/Hold operation still handles them.
+	if (!controllerProfile.empty())
+	{
+		uint64_t profileAddress = 0;
+		std::string profileFailure;
+		if (Memory::TryReadPointers(
+			queued.actorAddress,
+			{0x394, 0xAC, 0xA4},
+			profileAddress,
+			true,
+			&profileFailure))
+		{
+			const std::string before = Memory::read_string(
+				profileAddress, 32, __FUNCTION__);
+			Memory::write_string(
+				profileAddress, controllerProfile, 32, __FUNCTION__);
+			const std::string readback = Memory::read_string(
+				profileAddress, 32, __FUNCTION__);
+			std::stringstream profileStream;
+			profileStream << "Player " << queued.playerNumber
+				<< " controller profile: guest=0x" << std::hex
+				<< (profileAddress - Memory::getBaseAddress())
+				<< ", host=0x" << profileAddress << std::dec
+				<< ", before=" << (before.empty() ? "<empty>" : before)
+				<< ", requested=" << controllerProfile
+				<< ", readback=" << (readback.empty() ? "<empty>" : readback)
+				<< ", mode=" << EquipmentModeName(queued.mode) << ".";
+			Logging::LoggerService::LogInformation(profileStream.str(), __FUNCTION__);
+		}
+		else
+		{
+			Logging::LoggerService::LogWarning(
+				"Player " + std::to_string(queued.playerNumber) +
+				" controller profile is unavailable: " + profileFailure + ".",
+				__FUNCTION__);
+		}
+	}
+
 	const uint32_t stringLocation = static_cast<uint32_t>(trnsData.ringPtr);
 	const uint32_t safeStringLocation = stringLocation + 64;
-	const uint32_t actorState = queued.held ? 0u : 1u;
+	const uint32_t actorState = held ? 0u : 1u;
 	{
 		std::unique_lock<std::shared_mutex> dataLock(data_mutex);
 		memInstance->memory_writeMemory(stringLocation, static_cast<byte>(0), baseAddress);
@@ -908,18 +1103,19 @@ bool setupEquipmentState(PPCInterpreter_t* hCPU, TransferableData& trnsData,
 	trnsData.enabled = true;
 	trnsData.interceptRegisters = false;
 	pending_spawn_sequence = ++spawn_request_sequence;
-	pending_spawn_name = queued.held ? "Hold" : "Equip";
+	pending_spawn_name = held ? "Hold" : "Equip";
 	pending_dispatch_kind = PendingDispatchKind::EquipmentState;
 	pending_equipment_player = queued.playerNumber;
 	pending_equipment_actor = queued.actorAddress;
-	pending_equipment_held = queued.held;
+	pending_equipment_mode = queued.mode;
 	last_observed_dispatch_state = -1;
 
 	std::stringstream stream;
 	stream << "Submitted direct equipment state for player " << queued.playerNumber
 		<< ": actor=0x" << std::hex << queued.actorAddress
 		<< ", controller=0x" << animationController
-		<< ", state=" << (queued.held ? "Hold(0)" : "Equip(1)")
+		<< ", state=" << (held ? "Hold(0)" : "Equip(1)")
+		<< ", mode=" << EquipmentModeName(queued.mode)
 		<< ", readback="
 		<< Memory::read_bigEndian4BytesOffset(queued.actorAddress + 0xb94, __FUNCTION__)
 		<< ".";
@@ -1104,7 +1300,8 @@ void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBu
 			equipmentStream << "Direct equipment state returned for player "
 				<< pending_equipment_player << " at actor 0x" << std::hex
 				<< pending_equipment_actor << ": "
-				<< (pending_equipment_held ? "Hold" : "Equip") << ".";
+				<< (IsEquipmentHeld(pending_equipment_mode) ? "Hold" : "Equip")
+				<< ", mode=" << EquipmentModeName(pending_equipment_mode) << ".";
 			Logging::LoggerService::LogInformation(equipmentStream.str(), __FUNCTION__);
 		}
 		pending_spawn_sequence = 0;
@@ -1115,7 +1312,7 @@ void mainFn(PPCInterpreter_t* hCPU, uint32_t startTrnsData, uint32_t startRingBu
 		pending_animation_hash = 0;
 		pending_equipment_player = 0;
 		pending_equipment_actor = 0;
-		pending_equipment_held = false;
+		pending_equipment_mode = EquipmentSheathed;
 		pending_delete_player = 0;
 		pending_delete_actor = 0;
 		last_observed_dispatch_state = -1;
@@ -1230,6 +1427,7 @@ void OnActorCreate(PPCInterpreter_t* hCPU)
 
 	std::string name = Memory::read_string(Main::baseAddr + hCPU->gpr[3] + 0x10, 100, __FUNCTION__);
 	LogEquipmentChildCreation(name, hCPU->gpr[3]);
+	ObserveArrowCreation(name, hCPU->gpr[3]);
 	if (name.rfind("Weapon_", 0) == 0)
 	{
 		std::stringstream weaponStream;
@@ -1333,7 +1531,8 @@ void OnActorCreate(PPCInterpreter_t* hCPU)
 		queueRemoteEquipmentState(
 			spawnedPlayer,
 			hCPU->gpr[3],
-			player->second->LastEquipmentState.load(std::memory_order_acquire) != 0);
+			player->second->LastEquipmentState.load(std::memory_order_acquire),
+			player->second->Equipment->LastKnown->WType);
 
 		Logging::LoggerService::LogDebug("Player " + std::to_string(spawnedPlayer) + " setup correctly.", __FUNCTION__);
 		if (requiresEquipmentReload)
@@ -1432,6 +1631,7 @@ void OnActorErase(PPCInterpreter_t* hCPU)
 		return;
 
 	std::string name = Memory::read_string(Main::baseAddr + hCPU->gpr[3] + 0x10, 100, __FUNCTION__);
+	ObserveArrowErase(name, hCPU->gpr[3]);
 
 	std::vector<std::string> BombChoices = {"CustomRemoteBomb", "CustomRemoteBomb2", "CustomRemoteBombCube", "CustomRemoteBombCube2"};
 	std::vector<std::string> RealBombChoices = { "RemoteBomb", "RemoteBomb2", "RemoteBombCube", "RemoteBombCube2" };
@@ -1770,7 +1970,7 @@ void init() {
 	osLib_registerHLEFunction("multiplayer", "WeatherSync", static_cast<void (*) (PPCInterpreter_t*)>(&WeatherFn));
 	osLib_registerHLEFunction("ukl_actorinterceptor", "OnActorCreate", static_cast<void (*) (PPCInterpreter_t*)>(&OnActorCreate));
 	Logging::LoggerService::LogInformation(
-		"Equipment synchronization runtime: raw-controller-relay-v10.",
+		"Equipment synchronization runtime: typed-bow-arrow-relay-v11.",
 		__FUNCTION__);
 	// Clear native actor state only after BOTW actually erases the actor. The
 	// earlier deleteLater hook can run inside the shared PPC dispatcher and must

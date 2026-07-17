@@ -9,9 +9,14 @@
 #include "Extrapolation.h"
 #include "LocalInstance.h"
 #include "Vec3f_Operations.h"
+#include "EquipmentMode.h"
 
 void queueRemoteAnimation(int playerNumber, uint64_t actorAddress, uint32_t animation);
-void queueRemoteEquipmentState(int playerNumber, uint64_t actorAddress, bool held);
+void queueRemoteEquipmentState(
+	int playerNumber, uint64_t actorAddress, byte mode, byte weaponType);
+void queueRemoteArrowClaim(
+	int playerNumber, int generation, const std::string& actorName);
+extern std::mutex remoteArrowRequestMutex;
 void queueRemoteActorRefresh(int playerNumber, uint64_t actorAddress);
 
 namespace MemoryAccess
@@ -56,6 +61,7 @@ namespace MemoryAccess
 		BombAccess* Bomb2 = new BombAccess();
 		BombAccess* BombCube = new BombAccess();
 		BombAccess* BombCube2 = new BombAccess();
+		ProjectileAccess* Arrow = new ProjectileAccess();
 
 		bool HideFromMap = false;
 
@@ -174,9 +180,7 @@ namespace MemoryAccess
 				PlayerData->EquipmentState, std::memory_order_acq_rel);
 			const bool equipmentStateChanged =
 				previousEquipmentState != PlayerData->EquipmentState;
-			const bool heldStateChanged =
-				(previousEquipmentState != 0) != (PlayerData->EquipmentState != 0);
-			const bool equipmentHeld = PlayerData->EquipmentState != 0;
+			const bool equipmentHeld = IsEquipmentHeld(PlayerData->EquipmentState);
 
 			// Keep the EventFlow parameter current for the legacy path. Native Cemu
 			// does not schedule this flow reliably, so the live actor state is also
@@ -196,7 +200,7 @@ namespace MemoryAccess
 						<< std::hex << HoldAddr << " before actor update: requested="
 						<< equipmentState << ", readback="
 						<< Memory::read_string(HoldAddr, 6, __FUNCTION__)
-						<< ", raw=0x" << static_cast<int>(PlayerData->EquipmentState) << ".";
+						<< ", mode=" << EquipmentModeName(PlayerData->EquipmentState) << ".";
 					Logging::LoggerService::LogInformation(stream.str(), __FUNCTION__);
 				}
 			}
@@ -205,8 +209,15 @@ namespace MemoryAccess
 				return;
 
 #ifndef _WIN32
-			if (heldStateChanged)
-				queueRemoteEquipmentState(PlayerNumber, baseAddr, equipmentHeld);
+			// A melee-to-bow transition previously remained the same ASCII 'W' byte,
+			// so no new Hold operation reached the actor. Re-dispatch on every typed
+			// mode transition; BOTW can then re-evaluate its active equipment child.
+			if (equipmentStateChanged)
+				queueRemoteEquipmentState(
+					PlayerNumber,
+					baseAddr,
+					PlayerData->EquipmentState,
+					PlayerData->Equipment.WType);
 #endif
 
 			// Jugador's per-frame EventFlow is not scheduled by the generated NPC
@@ -307,6 +318,7 @@ namespace MemoryAccess
 			ManageBomb(PlayerData->Bomb2, 1);
 			ManageBomb(PlayerData->BombCube, 2);
 			ManageBomb(PlayerData->BombCube2, 3);
+			ManageArrow(PlayerData->Arrow);
 		}
 
 		void set(DTO::FarCharacterDTO* PlayerData, bool DispNames, bool isPaused)
@@ -424,6 +436,7 @@ namespace MemoryAccess
 			this->EquipmentRefreshPending.store(false, std::memory_order_release);
 			if (pThread.joinable())
 				pThread.join();
+			Arrow->Reset(__FUNCTION__, true);
 			setAddress(0);
 		}
 
@@ -438,6 +451,7 @@ namespace MemoryAccess
 			this->EquipmentRefreshPending.store(false, std::memory_order_release);
 			if (pThread.joinable())
 				pThread.join();
+			Arrow->Reset(__FUNCTION__, false);
 			setAddress(0);
 		}
 
@@ -545,6 +559,48 @@ namespace MemoryAccess
 					Bomb->changeState(Processing);
 				}
 			}
+		}
+
+		static std::string ArrowActorName(byte type)
+		{
+			switch (type)
+			{
+			case 1: return "FireArrow";
+			case 2: return "IceArrow";
+			case 3: return "ElectricArrow";
+			case 4: return "BombArrow_A";
+			case 5: return "AncientArrow";
+			default: return "NormalArrow";
+			}
+		}
+
+		void ManageArrow(const ProjectileDTO& projectile)
+		{
+			Arrow->UpdateRemote(projectile, __FUNCTION__);
+			if (!projectile.Active || projectile.Id <= 0)
+				return;
+
+			const std::string actorName = ArrowActorName(projectile.Type);
+			if (!Arrow->PrepareRemote(projectile, actorName))
+				return;
+			{
+				// Keep the global actor queue and ordered ownership claims in the
+				// same cross-player order for identical simultaneous arrow types.
+				std::lock_guard<std::mutex> requestLock(remoteArrowRequestMutex);
+				if (!GameInstance->RequestCreate(actorName, projectile.Position))
+				{
+					ProjectileDTO cancelled = projectile;
+					cancelled.Active = false;
+					Arrow->UpdateRemote(cancelled, __FUNCTION__);
+					return;
+				}
+				queueRemoteArrowClaim(PlayerNumber, projectile.Id, actorName);
+			}
+
+			Logging::LoggerService::LogInformation(
+				"Queued remote arrow player=" + std::to_string(PlayerNumber) +
+				", id=" + std::to_string(projectile.Id) + ", actor=" + actorName + ".",
+				__FUNCTION__);
 		}
 
 		void UpdateMapPin(Vec3f newPosition, bool show)
